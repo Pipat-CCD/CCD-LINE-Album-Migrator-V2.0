@@ -1,12 +1,22 @@
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 
-from migrator.core import LocalSetupError, run_exiftool, validate_exiftool
+from migrator.core import LocalSetupError, find_exiftool, run_exiftool, validate_exiftool
 
 
 class ExifToolTests(unittest.TestCase):
+    def test_frozen_package_uses_bundled_tool_over_stale_user_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            tool = Path(directory) / 'tools' / 'exiftool.exe'
+            tool.parent.mkdir()
+            tool.touch()
+            with patch.object(sys, 'frozen', True, create=True), patch.object(sys, '_MEIPASS', directory, create=True):
+                self.assertEqual(find_exiftool('old-missing-tool.exe'), str(tool))
+
     def test_pause_executable_is_rejected_before_start(self):
         with patch('migrator.core.subprocess.run') as execute:
             with self.assertRaisesRegex(LocalSetupError, 'เปลี่ยนชื่อเป็น exiftool.exe'):

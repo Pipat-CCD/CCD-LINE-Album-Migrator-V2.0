@@ -2,6 +2,19 @@
 
 รุ่นโค้ดปัจจุบัน: **build 2.0.1** ตรวจหมายเลขบนแถบชื่อหน้าต่างเพื่อยืนยันว่าปิดแล้วเปิดโปรแกรมรุ่นอัปเดตจริง
 
+## ติดตั้งครั้งเดียวด้วย Setup EXE
+
+ตัวติดตั้ง Windows 64-bit สร้างจาก [GitHub Actions](https://github.com/Pipat-CCD/CCD-LINE-Album-Migrator-V2.0/actions/workflows/windows-installer.yml) รวม Python, HEIF decoder, timezone database และ ExifTool 13.59 ทั้งชุด ไม่ต้องลง Python/ExifTool แยก ตัวติดตั้งจะเผยแพร่ใน [Releases](https://github.com/Pipat-CCD/CCD-LINE-Album-Migrator-V2.0/releases) หลัง Windows build และ automated install test ผ่านเท่านั้น
+
+1. ดาวน์โหลด **CCDLineMigrator-Setup.exe** จาก Releases แล้วดับเบิลคลิกติดตั้ง (รองรับภาษาไทย)
+2. เปิด **CCD LINE Album Migrator V2.0** จาก Start Menu หรือเลือกสร้างไอคอน Desktop ขณะติดตั้ง
+3. ครั้งแรกเลือก OAuth Desktop client_secret.json ขององค์กร แล้วเชื่อมบัญชี `ccdphoto@ccdthailand.org` ExifTool ที่มากับโปรแกรมถูกเลือกอัตโนมัติ ไม่ต้องหาไฟล์เอง
+4. เลือกอัลบั้ม ยืนยันวันที่ Dry Run แล้วอัปโหลดตามขั้นตอนเดิม
+
+ติดตั้งเฉพาะผู้ใช้ปัจจุบันใน `%LOCALAPPDATA%\Programs\CCDLineMigrator` ไม่ต้องใช้ Administrator ข้อมูลจริงอยู่ `%LOCALAPPDATA%\CCDLineMigrator` แยกจากโปรแกรม การติดตั้งอัปเดตทับหรือถอนการติดตั้งจะเก็บ token, ประวัติ SQLite และสำเนาไว้ ปิดงานอัปโหลดและรอคำขอจบก่อนอัปเดตเสมอ
+
+ตัวติดตั้งไม่มี Authenticode signature และไม่รวม client secret/token ขององค์กร ตรวจ SHA-256 ตามไฟล์ SHA256SUMS.txt ใน release หากไม่มี release หรือ Windows workflow ยังไม่ผ่าน อย่าถือว่าสร้างตัวติดตั้งสำเร็จแล้ว
+
 โปรแกรมภาษาไทยสำหรับ Windows 11 เพื่อย้ายภาพจากโฟลเดอร์อัลบั้ม LINE ไปยัง Google Photos ของ `ccdphoto@ccdthailand.org` พร้อมปรับวันที่บน **ไฟล์สำเนา** เท่านั้น
 
 สร้างใหม่ตามคำอนุญาตของผู้ใช้ เนื่องจากรีโพซิทอรีเดิมมีเพียงไฟล์ว่าง `LineCCDPics` ไม่มีโค้ด V1 ให้ตรวจสอบหรือใช้ต่อ ไม่ได้แก้ไฟล์ V1 บนไดรฟ์ D: และไม่ได้ย้าย token เดิมโดยอัตโนมัติ
@@ -113,6 +126,8 @@ Google Photos ไม่มี transaction ร่วมกับ SQLite และ
 ไฟล์สำเนาที่ค้างจากงานล้มเหลวไม่ถือว่าผ่าน validation กด Dry Run ใหม่จะสร้างสำเนาจากต้นฉบับแล้วเขียนและตรวจวันที่ใหม่ ไม่ต้องลบฐานข้อมูลหรือรูปต้นฉบับ
 
 ## สร้าง EXE บน Windows
+
+สร้าง **ตัวติดตั้ง** โดยติดตั้ง Inno Setup 6.5 ขึ้นไป แล้วรัน `./build-installer.ps1` สคริปต์จะดาวน์โหลด ExifTool ทาง HTTPS ตรวจ SHA-256 ที่ผู้พัฒนาเผยแพร่ build โปรแกรม ทดสอบ แล้ว compile Setup EXE ใน `dist/installer` หากมี ExifTool อยู่แล้วส่ง `-ExifToolDirectory` ได้ GitHub Actions ทำขั้นตอนเดียวกันบน Windows และทดสอบติดตั้ง/อัปเดต/ถอนติดตั้งก่อนเผยแพร่เมื่อ push tag `v*` ส่วน Run workflow แบบ manual สร้าง artifact โดยไม่เผยแพร่ release
 
 ```powershell
 .\build.ps1 -ExifToolDirectory 'D:\Tools\ExifTool-13.59'

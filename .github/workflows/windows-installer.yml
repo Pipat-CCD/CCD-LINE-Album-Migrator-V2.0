@@ -1,0 +1,64 @@
+name: Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Build app and installer with verified ExifTool
+        shell: pwsh
+        run: ./build-installer.ps1
+      - name: Test GUI and installed package
+        shell: pwsh
+        run: |
+          $env:CCD_TEST_EXIFTOOL = (Resolve-Path './dist/CCDLineMigrator/_internal/tools/exiftool.exe').Path
+          ./.venv/Scripts/python.exe -m tests.gui_smoke
+          if ($LASTEXITCODE -ne 0) { throw 'Windows GUI smoke failed' }
+          ./packaging/test-installed.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CCDLineMigrator-Windows-Installer
+          path: |
+            dist/installer/CCDLineMigrator-Setup.exe
+            dist/installer/SHA256SUMS.txt
+            dist/installer/installed-validation.json
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: CCDLineMigrator-Windows-Installer
+          path: installer
+      - name: Publish tested installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          installer/CCDLineMigrator-Setup.exe
+          installer/SHA256SUMS.txt
+          installer/installed-validation.json
+          --title "CCD LINE Album Migrator $GITHUB_REF_NAME"
+          --notes-file packaging/release-notes.md

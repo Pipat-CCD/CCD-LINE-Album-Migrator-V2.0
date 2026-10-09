@@ -15,9 +15,12 @@ $env:CCD_TEST_EXIFTOOL = Join-Path $toolDir 'exiftool.exe'
 Check-Exit
 & .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 Check-Exit
+$licenses = Join-Path $PSScriptRoot 'build\bundled-licenses'
+& .\.venv\Scripts\python.exe .\packaging\export_licenses.py $licenses
+Check-Exit
 & .\.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean --onedir --windowed `
     --name CCDLineMigrator --collect-all pillow_heif --collect-all tzdata `
-    --add-data "$toolDir;tools" main.py
+    --add-data "$toolDir;tools" --add-data "$licenses;licenses" main.py
 Check-Exit
 # Windowed applications write self-check output to a file instead of stdout.
 $check = Join-Path $env:TEMP 'ccd-migrator-selfcheck.json'

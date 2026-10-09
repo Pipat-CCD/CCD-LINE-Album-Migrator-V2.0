@@ -171,12 +171,14 @@ class Ledger:
 
 
 def find_exiftool(configured: str = '') -> str:
+    import sys
+    bundled = Path(getattr(sys, '_MEIPASS', Path(__file__).parent.parent)) / 'tools' / 'exiftool.exe'
+    if getattr(sys, 'frozen', False) and bundled.is_file():
+        return str(bundled)
     if configured:
         if not Path(configured).is_file():
             raise LocalSetupError('ไม่พบ ExifTool ตามเส้นทางที่ตั้งไว้ กรุณาเลือกไฟล์ใหม่')
         return str(Path(configured).resolve())
-    import sys
-    bundled = Path(getattr(sys, '_MEIPASS', Path(__file__).parent.parent)) / 'tools' / 'exiftool.exe'
     if bundled.is_file():
         return str(bundled)
     found = shutil.which('exiftool') or shutil.which('exiftool.exe')

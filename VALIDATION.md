@@ -4,7 +4,7 @@
 
 สภาพแวดล้อม Linux, Python 3.12.14, ExifTool 13.59 จาก official Git tag `13.59`, commit `2200871d9cef988051d2a99d67df3bda6cbb30a8` ใช้ TLS และไม่ปิดการตรวจสอบความถูกต้อง
 
-- `unittest discover`: 45 tests ผ่าน ไม่มี skip เมื่อกำหนด `CCD_TEST_EXIFTOOL` รวมการรับบัญชี `ccdphoto@ccdthailand.org` และปฏิเสธบัญชีปลายทางเดิมด้วย API mock
+- `unittest discover`: 46 tests ผ่าน ไม่มี skip เมื่อกำหนด `CCD_TEST_EXIFTOOL` รวมการรับบัญชี `ccdphoto@ccdthailand.org` และปฏิเสธบัญชีปลายทางเดิมด้วย API mock
 - การแก้ TimeoutExpired: ตรวจชื่อ `exiftool(-k).exe` ก่อนเรียก, ปิด stdin, ตรวจ startup version, แสดงข้อความ timeout ที่ปลอดภัย และทดสอบ process ที่ค้างจริงแล้วถูกยุติเมื่อครบ timeout ไม่ใช่การทดสอบ ExifTool Windows launcher บน Windows จริง
 - เขียน metadata ด้วย ExifTool จริงใน JPEG, PNG ที่ไม่มี EXIF และ HEIC ที่แปลงเป็น JPEG: ตรวจอ่าน DateTimeOriginal, CreateDate, ModifyDate, OffsetTimeOriginal และตรวจ hash ต้นฉบับ
 - ตรวจ filesystem Date modified ของสำเนาให้เป็น `2025-05-09 00:00:00 Asia/Bangkok` และตรวจ Date modified ของต้นฉบับไม่เปลี่ยนบน Linux; การแสดงผล Windows Explorer ยังต้องทดสอบบน Windows
@@ -32,6 +32,8 @@
 จึงส่งมอบเป็น **Source Code ที่ผ่านการทดสอบส่วน local และ API mock** ไม่ใช่โปรแกรม Windows ที่ผ่านการทดสอบ end-to-end แล้ว สคริปต์ build จะตรวจ ExifTool และเรียก self-check จาก EXE ที่แพ็กบน Windows แต่ยังไม่ได้รันบนเครื่องนี้
 
 ## การรับรองก่อนใช้จริง
+
+มี Windows installer workflow เพิ่มแล้ว ตรวจผล Windows ล่าสุดจาก GitHub Actions และไฟล์ `installed-validation.json` ที่เผยแพร่คู่กับตัวติดตั้ง การเพิ่มสคริปต์เองไม่ใช่หลักฐานว่า Windows build/install ผ่าน สคริปต์ทดสอบติดตั้งจริง ตรวจโปรแกรมที่ติดตั้งเมื่อไม่มี Python/ExifTool ใน PATH, Dry Run 3 รูปแบบ, shortcut และการเก็บข้อมูลเมื่ออัปเดต/ถอนติดตั้ง และเผยแพร่ release เฉพาะเมื่อ job ทั้งหมดผ่าน
 
 1. Windows 11: Setup.cmd / Start.cmd เปิดได้ เลือก ExifTool 13.59 และผ่านเทสต์ metadata จริง
 2. ตรวจ DPAPI round-trip ในชุดทดสอบและสิทธิ์โฟลเดอร์ข้อมูลผู้ใช้

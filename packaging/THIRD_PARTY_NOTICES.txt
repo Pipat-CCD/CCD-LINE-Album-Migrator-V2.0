@@ -1,0 +1,17 @@
+CCD LINE Album Migrator includes third-party components.
+
+ExifTool 13.59 by Phil Harvey: https://exiftool.org/
+ExifTool is free software distributed under the same terms as Perl.
+The complete official Windows package and its accompanying license files are retained.
+SHA-256 provenance: https://exiftool.org/checksums-13.59.txt
+
+Python: https://www.python.org/psf/license/
+PyInstaller bootloader: https://pyinstaller.org/en/stable/license.html
+Inno Setup and Thai translation: https://github.com/jrsoftware/issrc
+The Thai.isl source retains its contributor attribution.
+
+Python dependency versions: requirements-lock.txt in the source repository.
+Each dependency retains its own licensing terms. Bundled licenses are under _internal/licenses.
+
+This installer does not contain OAuth client credentials, access tokens, refresh tokens,
+or any organization photo data. Users authorize their own account after installation.
