@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -15,6 +17,38 @@ from pillow_heif import register_heif_opener
 
 register_heif_opener()
 SUPPORTED = {'.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp', '.bmp', '.gif', '.tif', '.tiff', '.ico', '.avif'}
+
+
+class LocalSetupError(RuntimeError):
+    """A deliberately safe local error that may be displayed in the GUI."""
+
+
+def run_exiftool(tool: str, arguments: list[str], operation: str, timeout=180):
+    if '(-k)' in Path(tool).name.lower():
+        raise LocalSetupError('เลือก exiftool(-k).exe ซึ่งรอกดปุ่มเมื่อจบงาน '
+                              'กรุณาเปลี่ยนชื่อเป็น exiftool.exe แล้วเลือกไฟล์ใหม่ในหน้าตั้งค่า')
+    try:
+        return subprocess.run([tool, *arguments], stdin=subprocess.DEVNULL,
+                              capture_output=True, check=True, timeout=timeout,
+                              creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+    except subprocess.TimeoutExpired:
+        raise LocalSetupError(f'ExifTool ใช้เวลาเกิน {timeout} วินาทีขณะ{operation} '
+                              'งานหยุดและยังไม่ผ่านการตรวจวันที่ '
+                              'ตรวจว่าเลือก exiftool.exe พร้อมโฟลเดอร์ exiftool_files ครบ '
+                              'และลองคัดลอกอัลบั้มจากเครือข่าย/OneDrive มายังดิสก์ในเครื่องก่อน') from None
+    except subprocess.CalledProcessError as exc:
+        raise LocalSetupError(f'ExifTool ไม่สำเร็จขณะ{operation} (exit code {exc.returncode}) '
+                              'ตรวจสิทธิ์ไฟล์และโฟลเดอร์ exiftool_files') from None
+    except OSError:
+        raise LocalSetupError('เปิด ExifTool ไม่ได้ ตรวจเส้นทาง executable และไฟล์ประกอบ') from None
+
+
+def validate_exiftool(tool: str) -> str:
+    result = run_exiftool(tool, ['-ver'], 'ตรวจการเริ่มทำงาน', timeout=15)
+    version = result.stdout.decode('utf-8', errors='replace').strip()
+    if not re.fullmatch(r'\d+\.\d+', version):
+        raise LocalSetupError('ไฟล์ที่เลือกไม่ตอบเวอร์ชัน ExifTool กรุณาเลือก exiftool.exe')
+    return version
 
 
 def album_date(value: str) -> date:
@@ -120,7 +154,9 @@ class Ledger:
 
 
 def find_exiftool(configured: str = '') -> str:
-    if configured and Path(configured).is_file():
+    if configured:
+        if not Path(configured).is_file():
+            raise LocalSetupError('ไม่พบ ExifTool ตามเส้นทางที่ตั้งไว้ กรุณาเลือกไฟล์ใหม่')
         return str(Path(configured).resolve())
     import sys
     bundled = Path(getattr(sys, '_MEIPASS', Path(__file__).parent.parent)) / 'tools' / 'exiftool.exe'
@@ -128,15 +164,21 @@ def find_exiftool(configured: str = '') -> str:
         return str(bundled)
     found = shutil.which('exiftool') or shutil.which('exiftool.exe')
     if not found:
-        raise RuntimeError('ไม่พบ ExifTool: เลือก exiftool.exe ในหน้าตั้งค่า')
+        raise LocalSetupError('ไม่พบ ExifTool: เลือก exiftool.exe ในหน้าตั้งค่า')
     return found
 
 
 def metadata(path: Path, tool: str) -> dict:
-    output = subprocess.run([tool, '-j', '-DateTimeOriginal', '-CreateDate', '-ModifyDate',
-                             '-OffsetTimeOriginal', '-XMP:DateCreated', str(path)],
-                            capture_output=True, check=True, timeout=60)
-    return json.loads(output.stdout)[0]
+    output = run_exiftool(tool, ['-j', '-DateTimeOriginal', '-CreateDate', '-ModifyDate',
+                                 '-OffsetTimeOriginal', '-XMP:DateCreated', str(path.resolve())],
+                          'อ่าน metadata')
+    try:
+        values = json.loads(output.stdout)
+        if not isinstance(values, list) or not values or not isinstance(values[0], dict):
+            raise ValueError('invalid metadata response')
+        return values[0]
+    except (ValueError, TypeError):
+        raise LocalSetupError('ExifTool ไม่คืน metadata ที่อ่านได้ งานนี้ยังไม่ผ่านการตรวจวันที่') from None
 
 
 def prepare(photo: Photo, when: date, output: Path, tool: str) -> Path:
@@ -158,10 +200,10 @@ def prepare(photo: Photo, when: date, output: Path, tool: str) -> Path:
             ImageOps.exif_transpose(image).convert('RGB').save(target, 'JPEG', quality=95)
     local = datetime.combine(when, datetime.min.time(), ZoneInfo('Asia/Bangkok'))
     stamp = local.strftime('%Y:%m:%d %H:%M:%S')
-    args = [tool, '-overwrite_original', f'-DateTimeOriginal={stamp}',
+    args = ['-overwrite_original', f'-DateTimeOriginal={stamp}',
             f'-CreateDate={stamp}', f'-ModifyDate={stamp}', '-OffsetTimeOriginal=+07:00',
             f'-XMP:DateCreated={local.isoformat()}', str(target)]
-    subprocess.run(args, capture_output=True, check=True, timeout=60)
+    run_exiftool(tool, args, 'เขียนวันที่ลงสำเนา')
     actual = metadata(target, tool)
     if any(actual.get(tag) != stamp for tag in ('DateTimeOriginal', 'CreateDate', 'ModifyDate')) or actual.get('OffsetTimeOriginal') != '+07:00':
         raise RuntimeError('ตรวจสอบ metadata หลังเขียนไม่ผ่าน')

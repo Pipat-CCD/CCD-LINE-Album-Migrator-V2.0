@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from .core import Ledger, Photo, prepare
+from .core import Ledger, LocalSetupError, Photo, prepare
 from .google_photos import AmbiguousResult, SafeAPIError, EXPECTED_ACCOUNT
 
 DONE_STATES = ('uploaded', 'confirmed_manual')
@@ -88,6 +88,7 @@ def run(albums, ledger: Ledger, output: Path, tool: str, control: Control, notif
                 notify(f'อัปโหลดแล้ว ข้าม {photo.path.name}', done, total)
                 continue
             try:
+                notify(f'กำลังเขียนและตรวจวันที่: {photo.path.name}', done - 1, total)
                 target = prepare(photo, album.when, output / album.key, tool)
                 if api:
                     token = api.upload(target)
@@ -102,6 +103,9 @@ def run(albums, ledger: Ledger, output: Path, tool: str, control: Control, notif
                 raise
             except SafeAPIError:
                 ledger.record(album.key, photo, 'failed', message='Google ปฏิเสธคำขอ')
+                raise
+            except LocalSetupError as exc:
+                ledger.record(album.key, photo, 'failed', message=str(exc))
                 raise
             except Exception as exc:
                 ledger.record(album.key, photo, 'failed', message=type(exc).__name__)

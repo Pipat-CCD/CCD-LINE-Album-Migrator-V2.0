@@ -10,7 +10,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from PIL import Image, ImageTk
 
-from .core import Ledger, album_date, find_exiftool, metadata, scan
+from .core import Ledger, LocalSetupError, album_date, find_exiftool, metadata, scan, validate_exiftool
 from .engine import Album, Control, run
 from .google_photos import PhotosAPI, SafeAPIError, authenticate
 from .lock import InstanceLock
@@ -111,6 +111,8 @@ class App:
         ttk.Button(settings, text='บันทึกการตั้งค่า', command=self.save_settings).pack(anchor='w', pady=8)
         self.auth_button = ttk.Button(settings, text='เชื่อมต่อ / ตรวจบัญชี Google', command=self.connect)
         self.auth_button.pack(anchor='w', pady=8)
+        self.tool_button = ttk.Button(settings, text='ตรวจสอบ ExifTool', command=self.check_tool)
+        self.tool_button.pack(anchor='w', pady=8)
         ttk.Label(settings, text=f'ข้อมูลและประวัติ: {self.data}\n'
                   'อย่าลบ state.sqlite3: ใช้ป้องกันอัปโหลดซ้ำ\n'
                   'การ Pause รอคำขอที่กำลังทำอยู่จบก่อน ไม่ยกเลิก HTTP กลางคัน').pack(anchor='w', pady=10)
@@ -285,7 +287,7 @@ class App:
             ttk.Label(window, text=json.dumps(current, ensure_ascii=False, indent=2) +
                       f'\nวันที่สำเนาที่จะเขียน: {album.when.isoformat()} 00:00:00 +07:00').pack()
         except Exception as exc:
-            messagebox.showerror('Preview ไม่สำเร็จ', type(exc).__name__)
+            messagebox.showerror('Preview ไม่สำเร็จ', str(exc) if isinstance(exc, LocalSetupError) else type(exc).__name__)
 
     def notify(self, message, done=0, total=1):
         self.events.put(('progress', message, done, total))
@@ -294,14 +296,14 @@ class App:
         if self.busy():
             return
         self.control = Control()
-        for button in self.edit_buttons + [self.dry_button, self.upload_button, self.auth_button]:
+        for button in self.edit_buttons + [self.dry_button, self.upload_button, self.auth_button, self.tool_button]:
             button.configure(state='disabled')
         def wrapper():
             try:
                 job()
             except Exception as exc:
                 # Never log arbitrary exception messages from OAuth/HTTP libraries.
-                message = str(exc) if isinstance(exc, SafeAPIError) else type(exc).__name__
+                message = str(exc) if isinstance(exc, (SafeAPIError, LocalSetupError)) else type(exc).__name__
                 self.events.put(('error', message))
             finally:
                 self.events.put(('finished',))
@@ -315,6 +317,19 @@ class App:
             credentials = authenticate(client, self.data / 'token.json', interactive=True)
             account = PhotosAPI(credentials).verify_account()
             self.notify(f'ยืนยันบัญชีสำเร็จ: {account}')
+        self.launch(job)
+
+    def check_tool(self):
+        if self.busy():
+            return
+        try:
+            tool = find_exiftool(self.tool.get())
+        except LocalSetupError as exc:
+            messagebox.showerror('ExifTool', str(exc))
+            return
+        def job():
+            version = validate_exiftool(tool)
+            self.notify(f'ExifTool {version} เริ่มทำงานและจบคำสั่งได้สำเร็จ')
         self.launch(job)
 
     def start(self, upload):
@@ -337,6 +352,9 @@ class App:
         if not upload:
             self.dry_ready = False
         def job():
+            self.notify('ตรวจสอบ ExifTool ก่อนเริ่มงาน')
+            version = validate_exiftool(tool)
+            self.notify(f'ExifTool {version} พร้อมใช้งาน')
             ledger = Ledger(self.data / 'state.sqlite3')
             try:
                 api = PhotosAPI(authenticate(client, self.data / 'token.json')) if upload else None
@@ -389,7 +407,7 @@ class App:
             elif event[0] == 'dry_ready':
                 self.dry_ready = True
             elif event[0] == 'finished':
-                for button in self.edit_buttons + [self.dry_button, self.upload_button, self.auth_button]:
+                for button in self.edit_buttons + [self.dry_button, self.upload_button, self.auth_button, self.tool_button]:
                     button.configure(state='normal')
         self.root.after(100, self.poll)
 

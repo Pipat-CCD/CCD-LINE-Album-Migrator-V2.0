@@ -1,9 +1,8 @@
 if __name__ == '__main__':
     import argparse
     import json
-    import subprocess
     from pathlib import Path
-    from migrator.core import Ledger, album_date, find_exiftool, scan
+    from migrator.core import Ledger, album_date, find_exiftool, scan, validate_exiftool
     from migrator.engine import Album, Control, run
     parser = argparse.ArgumentParser(description='CCD LINE Album Migrator')
     parser.add_argument('--self-check', action='store_true')
@@ -15,7 +14,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.self_check:
         tool = find_exiftool(args.exiftool)
-        version = subprocess.run([tool, '-ver'], capture_output=True, check=True, timeout=15).stdout.decode().strip()
+        version = validate_exiftool(tool)
         result = json.dumps({'exiftool': version, 'date_parser': album_date('9-5-68').isoformat()})
         if args.check_output:
             args.check_output.write_text(result, encoding='utf-8')
@@ -33,8 +32,10 @@ if __name__ == '__main__':
             parser.error('no supported photos, or corrupt files detected')
         ledger = Ledger(output / 'state.sqlite3')
         try:
+            tool = find_exiftool(args.exiftool)
+            validate_exiftool(tool)
             run([Album(source, album_date(args.date), photos)], ledger, output / 'copies',
-                find_exiftool(args.exiftool), Control(), lambda text, done, total: print(f'{done}/{total} {text}'))
+                tool, Control(), lambda text, done, total: print(f'{done}/{total} {text}'))
             ledger.export(output / 'report.csv')
         finally:
             ledger.close()
