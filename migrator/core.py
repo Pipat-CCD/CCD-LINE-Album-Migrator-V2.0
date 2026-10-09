@@ -24,6 +24,8 @@ class LocalSetupError(RuntimeError):
 
 
 def run_exiftool(tool: str, arguments: list[str], operation: str, timeout=180):
+    if hasattr(tool, 'execute'):
+        return tool.execute(arguments, operation, timeout)
     if '(-k)' in Path(tool).name.lower():
         raise LocalSetupError('เลือก exiftool(-k).exe ซึ่งรอกดปุ่มเมื่อจบงาน '
                               'กรุณาเปลี่ยนชื่อเป็น exiftool.exe แล้วเลือกไฟล์ใหม่ในหน้าตั้งค่า')

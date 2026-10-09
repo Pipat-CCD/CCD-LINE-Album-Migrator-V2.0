@@ -4,7 +4,7 @@
 
 สภาพแวดล้อม Linux, Python 3.12.14, ExifTool 13.59 จาก official Git tag `13.59`, commit `2200871d9cef988051d2a99d67df3bda6cbb30a8` ใช้ TLS และไม่ปิดการตรวจสอบความถูกต้อง
 
-- `unittest discover`: 27 tests ผ่าน ไม่มี skip เมื่อกำหนด `CCD_TEST_EXIFTOOL` รวมการรับบัญชี `ccdphoto@ccdthailand.org` และปฏิเสธบัญชีปลายทางเดิมด้วย API mock
+- `unittest discover`: 30 tests ผ่าน ไม่มี skip เมื่อกำหนด `CCD_TEST_EXIFTOOL` รวมการรับบัญชี `ccdphoto@ccdthailand.org` และปฏิเสธบัญชีปลายทางเดิมด้วย API mock
 - การแก้ TimeoutExpired: ตรวจชื่อ `exiftool(-k).exe` ก่อนเรียก, ปิด stdin, ตรวจ startup version, แสดงข้อความ timeout ที่ปลอดภัย และทดสอบ process ที่ค้างจริงแล้วถูกยุติเมื่อครบ timeout ไม่ใช่การทดสอบ ExifTool Windows launcher บน Windows จริง
 - เขียน metadata ด้วย ExifTool จริงใน JPEG, PNG ที่ไม่มี EXIF และ HEIC ที่แปลงเป็น JPEG: ตรวจอ่าน DateTimeOriginal, CreateDate, ModifyDate, OffsetTimeOriginal และตรวจ hash ต้นฉบับ
 - ตรวจ filesystem Date modified ของสำเนาให้เป็น `2025-05-09 00:00:00 Asia/Bangkok` และตรวจ Date modified ของต้นฉบับไม่เปลี่ยนบน Linux; การแสดงผล Windows Explorer ยังต้องทดสอบบน Windows
@@ -15,6 +15,8 @@
 - ตรวจปุ่มเปิดสำเนาเลือกเส้นทางโฟลเดอร์ที่ engine สร้างจริง โดย mock เฉพาะการเปิดตัวจัดการไฟล์; ยังไม่ได้ทดสอบการเปิด Windows Explorer บน Windows
 - `pip check`: ไม่มี dependency conflict
 - CLI `--self-check`: ExifTool 13.59, parser `9-5-68` เป็น `2025-05-09`
+- Persistent ExifTool: ใช้ process ID เดิมสำหรับหลายภาพและหลายคำสั่ง ตรวจ status ของทุกคำสั่ง รวมชื่อไฟล์/โฟลเดอร์ภาษาไทย คำสั่งผิดไม่ถูกนับเป็นผ่าน timeout ยุติ process และ context ปิด process หลังงาน
+- วัดเวลา prepare 71 ภาพจำลอง (JPEG 60, PNG 10, HEIC 1): แบบเปิด process ต่อคำสั่ง 21.916 วินาที; แบบ persistent 0.799 วินาที (~27.43 เท่า) บน Linux เดียวกัน รัน baseline ก่อน persistent โดยไม่รวม scan, GUI หรือ network ตัวเลขนี้ไม่รับประกันความเร็วบน Windows/รูปจริง และไม่ใช่ benchmark หลายรอบ
 
 ## สิ่งที่ยังไม่ทดสอบ
 

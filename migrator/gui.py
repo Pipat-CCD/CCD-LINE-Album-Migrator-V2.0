@@ -15,6 +15,7 @@ from PIL import Image, ImageTk
 
 from .core import Ledger, LocalSetupError, album_date, find_exiftool, metadata, scan, validate_exiftool
 from .engine import Album, Control, run
+from .exiftool_session import ExifToolSession
 from .google_photos import PhotosAPI, SafeAPIError, authenticate
 from .lock import InstanceLock
 
@@ -134,7 +135,7 @@ class App:
         self.root.protocol('WM_DELETE_WINDOW', self.close)
         self.restore_albums()
         self.load_history()
-        self.root.after(100, self.poll)
+        self.poll_id = self.root.after(100, self.poll)
 
     def save_albums(self):
         values = [{'folder': str(a.folder.resolve()), 'date': a.when.isoformat()} for a in self.albums.values()]
@@ -395,7 +396,8 @@ class App:
             ledger = Ledger(self.data / 'state.sqlite3')
             try:
                 api = PhotosAPI(authenticate(client, self.data / 'token.json')) if upload else None
-                run(albums, ledger, self.data / 'copies', tool, self.control, self.notify, api)
+                with ExifToolSession(tool) as session:
+                    run(albums, ledger, self.data / 'copies', session, self.control, self.notify, api)
                 if not upload and not self.control.cancelled.is_set():
                     self.events.put(('dry_ready',))
                     total = sum(len(a.photos) for a in albums)
@@ -448,13 +450,14 @@ class App:
             elif event[0] == 'finished':
                 for button in self.edit_buttons + [self.dry_button, self.upload_button, self.auth_button, self.tool_button]:
                     button.configure(state='normal')
-        self.root.after(100, self.poll)
+        self.poll_id = self.root.after(100, self.poll)
 
     def close(self):
         if self.busy():
             self.cancel()
             messagebox.showinfo('กำลังหยุด', 'รอคำขอปัจจุบันเสร็จ แล้วปิดอีกครั้ง เพื่อบันทึกผลให้ครบ')
             return
+        self.root.after_cancel(self.poll_id)
         self.root.destroy()
         self.instance_lock.close()
 

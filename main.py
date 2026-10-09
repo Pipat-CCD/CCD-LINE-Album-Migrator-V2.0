@@ -4,6 +4,7 @@ if __name__ == '__main__':
     from pathlib import Path
     from migrator.core import Ledger, album_date, find_exiftool, scan, validate_exiftool
     from migrator.engine import Album, Control, run
+    from migrator.exiftool_session import ExifToolSession
     parser = argparse.ArgumentParser(description='CCD LINE Album Migrator')
     parser.add_argument('--self-check', action='store_true')
     parser.add_argument('--check-output', type=Path)
@@ -34,8 +35,9 @@ if __name__ == '__main__':
         try:
             tool = find_exiftool(args.exiftool)
             validate_exiftool(tool)
-            run([Album(source, album_date(args.date), photos)], ledger, output / 'copies',
-                tool, Control(), lambda text, done, total: print(f'{done}/{total} {text}'))
+            with ExifToolSession(tool) as session:
+                run([Album(source, album_date(args.date), photos)], ledger, output / 'copies',
+                    session, Control(), lambda text, done, total: print(f'{done}/{total} {text}'))
             ledger.export(output / 'report.csv')
         finally:
             ledger.close()
