@@ -1,6 +1,6 @@
 # CCD LINE Album Migrator V2.0
 
-รุ่นโค้ดปัจจุบัน: **build 2.0.2** ตรวจหมายเลขบนแถบชื่อหน้าต่างเพื่อยืนยันว่าปิดแล้วเปิดโปรแกรมรุ่นอัปเดตจริง
+รุ่นโค้ดปัจจุบัน: **build 2.0.3** ตรวจหมายเลขบนแถบชื่อหน้าต่างเพื่อยืนยันว่าปิดแล้วเปิดโปรแกรมรุ่นอัปเดตจริง
 
 ## ติดตั้งครั้งเดียวด้วย Setup EXE
 
@@ -19,7 +19,7 @@
 
 สร้างใหม่ตามคำอนุญาตของผู้ใช้ เนื่องจากรีโพซิทอรีเดิมมีเพียงไฟล์ว่าง `LineCCDPics` ไม่มีโค้ด V1 ให้ตรวจสอบหรือใช้ต่อ ไม่ได้แก้ไฟล์ V1 บนไดรฟ์ D: และไม่ได้ย้าย token เดิมโดยอัตโนมัติ
 
-สถานะ build ตัวติดตั้งล่าสุด: ยังไม่ผ่าน เนื่องจาก SourceForge ตอบ HTTP 403 ขณะดาวน์โหลด ExifTool จึงยังไม่มี Setup EXE ที่ทดสอบผ่านให้ดาวน์โหลด ดูรายละเอียดใน VALIDATION.md
+Windows build และ automated install test ผ่านแล้วใน GitHub Actions run 37910933824: รวม ExifTool ที่ตรวจ checksum แล้ว ทดสอบ Dry Run จากโปรแกรมติดตั้งจริง และเก็บข้อมูลเมื่ออัปเดต/ถอนติดตั้ง ดูผลและขอบเขตใน VALIDATION.md
 
 ## เลือกอัลบั้มปลายทาง (build 2.0.2)
 
@@ -34,7 +34,7 @@
 
 ## สถานะการส่งมอบ
 
-มี Source Code, GUI, OAuth, เครื่องมือ Dry Run, SQLite Resume, รายงาน CSV และสคริปต์ build Windows ผลตรวจจริงดู [VALIDATION.md](VALIDATION.md) **ยังไม่ใช่ EXE ที่ผ่านการรับรองบน Windows และยังไม่ยืนยันการอัปโหลด Google Photos จริง** อย่าเริ่มทั้ง 100 อัลบั้มจนกว่าทดสอบอัลบั้มเล็กบนบัญชีองค์กรสำเร็จ
+มี Source Code, GUI, OAuth, เครื่องมือ Dry Run, SQLite Resume, รายงาน CSV และสคริปต์ build Windows ผลตรวจจริงดู [VALIDATION.md](VALIDATION.md) **ผ่าน automated Windows build/install test บน Windows Server 2022 แล้ว** การติดตั้งบน Windows 11 ของผู้ใช้และ Google OAuth/upload จริงยังต้องตรวจด้วยบัญชีองค์กร
 
 ## ติดตั้งบน Windows 11
 

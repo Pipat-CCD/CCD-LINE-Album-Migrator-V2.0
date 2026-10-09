@@ -25,11 +25,11 @@
 
 - ภาพ LINE จริง 71 ภาพขององค์กรยังไม่ได้รับมา ภาพทดสอบทั้งหมดเป็นภาพสร้างขึ้น
 - OAuth จริง, token refresh จริง, ยืนยันบัญชี `ccdphoto@ccdthailand.org` ผ่าน Google จริง, อัปโหลดจริง, การสร้างอัลบั้มจริง และวันที่ที่ Google Photos แสดงหลังอัปโหลด
-- GUI บน Windows 11, DPAPI และ Windows file lock บน Windows จริง: Linux tests ไม่ใช่หลักฐานรับรองส่วนนี้
-- `setup.ps1`, `build.ps1`, Setup.cmd และ Start.cmd บน Windows จริง และ EXE ที่สร้างด้วย PyInstaller
+- GUI และตัวติดตั้งบน Windows 11 เครื่องจริงของผู้ใช้ (Windows CI ใช้ Windows Server 2022)
+- การเรียก source installer `setup.ps1`, Setup.cmd และ Start.cmd บน Windows 11 ของผู้ใช้
 - ติดตั้งบนเครื่อง Windows สะอาด, นโยบายองค์กร, code signing และความจุ storage ของบัญชี
 
-จึงส่งมอบเป็น **Source Code ที่ผ่านการทดสอบส่วน local และ API mock** ไม่ใช่โปรแกรม Windows ที่ผ่านการทดสอบ end-to-end แล้ว สคริปต์ build จะตรวจ ExifTool และเรียก self-check จาก EXE ที่แพ็กบน Windows แต่ยังไม่ได้รันบนเครื่องนี้
+ส่งมอบ Source Code และตัวติดตั้งที่ผ่าน automated build/install บน Windows CI โดย Google API ใช้ mock การอัปโหลดบัญชีจริงและเครื่อง Windows 11 ของผู้ใช้ยังไม่ได้ตรวจโดยชุดทดสอบนี้
 
 ## การรับรองก่อนใช้จริง
 
@@ -51,10 +51,18 @@
 - API mock: เลือก ID ที่แอปเคยบันทึกแล้ว ไม่เรียกสร้างอัลบั้มอีก; ปฏิเสธ ID ที่ไม่มีประวัติก่อนส่งรูป
 - API mock: ผลสร้างอัลบั้มร่วมไม่แน่ชัดหยุดทั้งสองต้นทาง ไม่มี retry อัตโนมัติ
 - GUI จริงบน Linux/Xvfb: เปิดหน้าต่างเลือกอัลบั้มเดิม เลือกจากประวัติ ใช้กับแถวต้นทาง แสดงชื่อปลายทาง บังคับ Dry Run ใหม่ และคืนปลายทางหลังเปิดโปรแกรมใหม่
-- ยังไม่ได้ตรวจฟีเจอร์ปลายทางนี้กับบัญชี Google จริงหรือ Windows จริง
+- GUI smoke เดียวกันผ่านบน Windows CI รวมการเลือกปลายทางและป้องกัน retarget งานที่ส่งแล้ว ยังไม่ใช่การตรวจบัญชี Google จริง
 
-## Windows installer — ผลรันจริงที่ยังไม่ผ่าน
+## Windows installer — ผลรันจริงผ่านแล้ว
 
-GitHub Actions run `37904921173` บน Windows 2022 หยุดที่การดาวน์โหลด ExifTool 13.59: แหล่ง SourceForge ตอบ HTTP 403 และไม่มีไฟล์ที่ผ่าน SHA-256 ที่ผู้พัฒนาเผยแพร่ ระบบไม่ใช้ไฟล์ที่ checksum ผิด ไม่ลดการตรวจ TLS และยังไม่ได้เริ่ม PyInstaller/Inno Setup หรือ automated install test ใน run นี้ ไม่มี Setup EXE หรือ release ที่ยืนยันว่าผ่านแล้ว
+[GitHub Actions run 37910933824](https://github.com/Pipat-CCD/CCD-LINE-Album-Migrator-V2.0/actions/runs/37910933824) สำเร็จบน Windows Server 2022 หลังใช้ curl แก้ redirect ของ SourceForge โดยยังตรวจ SHA-256 ของแพ็กเกจ ExifTool 13.59 ตามที่ผู้พัฒนาเผยแพร่ ไม่มีการปิด TLS หรือใช้ไฟล์ checksum ผิด
 
-ใช้ `build-installer.ps1 -ExifToolDirectory <โฟลเดอร์ทางการที่แตก ZIP ครบชุด>` บนเครื่องที่เข้าถึงแพ็กเกจได้เพื่อข้ามขั้นดาวน์โหลด ส่วนการแพ็กและติดตั้งจริงยังต้องตรวจผล ไม่ใช่ขั้นตอนที่ทดสอบผ่านในคลาวด์นี้
+- build.ps1: ชุดทดสอบ 51 ข้อ, PyInstaller, packaged self-check และ ExifTool ที่รวมในแพ็กเกจ
+- Inno Setup: สร้าง CCDLineMigrator-Setup.exe
+- GUI smoke: เพิ่มอัลบั้ม, Dry Run, เลือกอัลบั้มปลายทาง, ป้องกัน retarget รูปที่ส่งแล้ว, เปิดใหม่คืนรายการ
+- ติดตั้งตัว Setup จริง แล้วเรียก EXE โดยเอา Python/ExifTool ภายนอกออกจาก PATH
+- Dry Run JPEG, PNG และ HEIC 3 ภาพจาก EXE ที่ติดตั้ง ตรวจ metadata, filesystem mtime และต้นฉบับไม่เปลี่ยน
+- ตรวจ Start Menu shortcut, ติดตั้งทับ และถอนติดตั้ง: sentinel ในข้อมูลผู้ใช้ยังอยู่
+- ผล structured อยู่ใน installed-validation.json คู่กับตัวติดตั้ง
+
+นี่เป็น Windows CI ไม่ใช่เครื่อง Windows 11 สะอาดของผู้ใช้ และไม่มีการเชื่อม Google หรืออัปโหลดจริงใน CI
