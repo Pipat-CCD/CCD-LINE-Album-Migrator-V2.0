@@ -119,6 +119,9 @@ class Ledger:
           CREATE TABLE IF NOT EXISTS skipped (
             album TEXT NOT NULL, source TEXT NOT NULL, sha TEXT, reason TEXT,
             PRIMARY KEY(album,source));
+          CREATE TABLE IF NOT EXISTS prepared_copies (
+            album TEXT NOT NULL, sha TEXT NOT NULL, target TEXT NOT NULL,
+            copy_sha TEXT NOT NULL, PRIMARY KEY(album,sha));
         ''')
 
     def state(self, album, sha):
@@ -136,6 +139,18 @@ class Ledger:
         self.db.execute('INSERT OR REPLACE INTO skipped VALUES(?,?,?,?)',
                         (album, str(photo.path), photo.sha256, 'corrupt' if photo.error else 'duplicate'))
         self.db.commit()
+
+    def cache_copy(self, album, photo, target):
+        if target.is_file():
+            self.db.execute('INSERT OR REPLACE INTO prepared_copies VALUES(?,?,?,?)',
+                            (album, photo.sha256, str(target.resolve()), digest(target)))
+            self.db.commit()
+
+    def mark_creating(self, album, photos):
+        with self.db:
+            for photo in photos:
+                self.db.execute('INSERT OR REPLACE INTO photos VALUES(?,?,?,?,NULL,?)',
+                    (album, photo.sha256, str(photo.path), 'creating', 'กำลังยืนยันผลชุดอัปโหลด'))
 
     def export(self, path: Path):
         import csv
@@ -222,4 +237,27 @@ def prepare(photo: Photo, when: date, output: Path, tool: str) -> Path:
         raise LocalSetupError('ตั้ง Date modified ของสำเนาไม่ได้ ตรวจสิทธิ์และระบบไฟล์ของโฟลเดอร์สำเนา') from None
     if abs(target.stat().st_mtime_ns - expected_ns) > 2_000_000_000:
         raise LocalSetupError('ตรวจ Date modified ของสำเนาไม่ผ่าน ยังไม่อนุญาตอัปโหลดไฟล์นี้')
+    return target
+
+
+def reusable_copy(ledger: Ledger, album, photo: Photo, when: date, output: Path, tool):
+    row = ledger.db.execute('SELECT target,copy_sha FROM prepared_copies WHERE album=? AND sha=?',
+                            (album, photo.sha256)).fetchone()
+    if not row:
+        return None
+    target = Path(row[0])
+    suffix = '.png' if photo.path.suffix.lower() == '.png' else '.jpg'
+    if target.resolve() != (output / (photo.sha256 + suffix)).resolve() or not target.is_file():
+        return None
+    if digest(photo.path) != photo.sha256:
+        raise LocalSetupError('ต้นฉบับเปลี่ยนหลัง Dry Run กรุณาเลือกอัลบั้มและตรวจใหม่')
+    if digest(target) != row[1]:
+        return None
+    local = datetime.combine(when, datetime.min.time(), ZoneInfo('Asia/Bangkok'))
+    stamp = local.strftime('%Y:%m:%d %H:%M:%S')
+    actual = metadata(target, tool)
+    if any(actual.get(tag) != stamp for tag in ('DateTimeOriginal', 'CreateDate', 'ModifyDate')):
+        return None
+    if actual.get('OffsetTimeOriginal') != '+07:00' or abs(target.stat().st_mtime - local.timestamp()) > 2:
+        return None
     return target

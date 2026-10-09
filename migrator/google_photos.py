@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+import threading
 from pathlib import Path
 
 import requests
@@ -57,19 +58,32 @@ def authenticate(client: Path, token: Path, interactive=False) -> Credentials:
 
 
 class PhotosAPI:
+    supports_batch_upload = True
+
     def __init__(self, credentials, sleeper=time.sleep):
         self.credentials = credentials
         self.session = requests.Session()
         self.sleep = sleeper
         self.account = None
+        self.auth_lock = threading.Lock()
 
     def _headers(self):
-        if not self.credentials.valid:
-            try:
-                self.credentials.refresh(Request())
-            except Exception:
-                raise SafeAPIError('refresh token ไม่สำเร็จ') from None
-        return {'Authorization': 'Bearer ' + self.credentials.token}
+        with self.auth_lock:
+            if not self.credentials.valid:
+                try:
+                    self.credentials.refresh(Request())
+                except Exception:
+                    raise SafeAPIError('refresh token ไม่สำเร็จ') from None
+            return {'Authorization': 'Bearer ' + self.credentials.token}
+
+    def upload_client(self):
+        client = PhotosAPI(self.credentials, self.sleep)
+        client.account = self.account
+        client.auth_lock = self.auth_lock
+        return client
+
+    def close(self):
+        self.session.close()
 
     def request(self, method, url, *, retry=False, mutating=False, **kwargs):
         custom = kwargs.pop('headers', {})
@@ -150,17 +164,41 @@ class PhotosAPI:
                 self.sleep(2 ** attempt)
 
     def create_media(self, upload_token, album_id, filename):
+        result = self.create_media_batch([(upload_token, filename)], album_id)[0]
+        if result['state'] == 'failed':
+            raise SafeAPIError(f"สร้าง media item ไม่สำเร็จ รหัส {result['code']}")
+        if result['state'] != 'uploaded':
+            raise AmbiguousResult('ไม่สามารถยืนยันผลสร้าง media item')
+        return result['media_id']
+
+    def create_media_batch(self, items, album_id):
         self._require_account()
+        if not 1 <= len(items) <= 50:
+            raise ValueError('batchCreate requires 1 to 50 items')
         response = self.request('POST', BASE + '/mediaItems:batchCreate', mutating=True,
             json={'albumId': album_id, 'newMediaItems': [
-                {'simpleMediaItem': {'uploadToken': upload_token, 'fileName': filename}}]})
+                {'simpleMediaItem': {'uploadToken': token, 'fileName': filename}} for token, filename in items]})
         try:
-            result = response.json()['newMediaItemResults'][0]
-            code = result.get('status', {}).get('code', 0)
-            if not isinstance(code, int):
-                raise ValueError('invalid status')
-            if code:
-                raise SafeAPIError(f'สร้าง media item ไม่สำเร็จ รหัส {code}')
-            return result['mediaItem']['id']
-        except (ValueError, KeyError, IndexError):
-            raise AmbiguousResult('ไม่สามารถยืนยันผลสร้าง media item') from None
+            results = response.json()['newMediaItemResults']
+            if not isinstance(results, list) or len(results) != len(items):
+                raise ValueError('invalid result count')
+            parsed = []
+            for index, item in enumerate(results):
+                if item.get('uploadToken', items[index][0]) != items[index][0]:
+                    parsed.append({'state': 'uncertain'})
+                    continue
+                code = item.get('status', {}).get('code', 0)
+                media_id = item.get('mediaItem', {}).get('id')
+                if not isinstance(code, int):
+                    parsed.append({'state': 'uncertain'})
+                elif code in (4, 13, 14):
+                    parsed.append({'state': 'uncertain'})
+                elif code:
+                    parsed.append({'state': 'failed', 'code': code})
+                elif not isinstance(media_id, str) or not media_id:
+                    parsed.append({'state': 'uncertain'})
+                else:
+                    parsed.append({'state': 'uploaded', 'media_id': media_id})
+            return parsed
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+            raise AmbiguousResult('ไม่สามารถยืนยันผลสร้าง media items ทั้งชุด') from None

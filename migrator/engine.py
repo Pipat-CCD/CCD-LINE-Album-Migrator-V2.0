@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from .core import Ledger, LocalSetupError, Photo, prepare
+from .core import Ledger, LocalSetupError, Photo, prepare, reusable_copy
 from .google_photos import AmbiguousResult, SafeAPIError, EXPECTED_ACCOUNT
+from .upload_pipeline import upload_album
 
 DONE_STATES = ('uploaded', 'confirmed_manual')
 
@@ -70,6 +71,13 @@ def run(albums, ledger: Ledger, output: Path, tool: str, control: Control, notif
                     raise
                 ledger.db.execute('UPDATE albums SET remote_id=?,state=? WHERE key=?', (remote_id, 'ready', album.key))
                 ledger.db.commit()
+        if api and getattr(api, 'supports_batch_upload', False) is True:
+            done = upload_album(album, ledger, output, tool, control, notify, api,
+                                remote_id, done, total, DONE_STATES)
+            if control.cancelled.is_set():
+                notify('ยกเลิกงานแล้ว สามารถ Resume ภายหลังได้', done, total)
+                return
+            continue
         for photo in album.photos:
             if not control.checkpoint():
                 notify('ยกเลิกงานแล้ว สามารถ Resume ภายหลังได้', done, total)
@@ -89,7 +97,10 @@ def run(albums, ledger: Ledger, output: Path, tool: str, control: Control, notif
                 continue
             try:
                 notify(f'กำลังเขียนและตรวจวันที่: {photo.path.name}', done - 1, total)
-                target = prepare(photo, album.when, output / album.key, tool)
+                target = reusable_copy(ledger, album.key, photo, album.when, output / album.key, tool) if api else None
+                if target is None:
+                    target = prepare(photo, album.when, output / album.key, tool)
+                    ledger.cache_copy(album.key, photo, target)
                 if api:
                     token = api.upload(target)
                     ledger.record(album.key, photo, 'creating')

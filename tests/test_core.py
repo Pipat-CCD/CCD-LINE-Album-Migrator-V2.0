@@ -213,6 +213,31 @@ class APITests(unittest.TestCase):
         self.assertEqual(len(request['newMediaItems']), 1)
         api.sleep.assert_called_once()
 
+    def test_batch_maps_success_failure_and_ambiguous_results(self):
+        api = self.api()
+        api.account = 'ccdphoto@ccdthailand.org'
+        api.session.request.return_value = self.response(200, {'newMediaItemResults': [
+            {'uploadToken': 'a', 'status': {}, 'mediaItem': {'id': 'm-a'}},
+            {'uploadToken': 'b', 'status': {'code': 3}},
+            {'uploadToken': 'c', 'status': {'code': 13}}]})
+        results = api.create_media_batch([('a', 'a.jpg'), ('b', 'b.jpg'), ('c', 'c.jpg')], 'album-1')
+        self.assertEqual([item['state'] for item in results], ['uploaded', 'failed', 'uncertain'])
+        self.assertEqual(results[0]['media_id'], 'm-a')
+
+    def test_missing_batch_results_are_ambiguous(self):
+        api = self.api()
+        api.account = 'ccdphoto@ccdthailand.org'
+        api.session.request.return_value = self.response(200, {'newMediaItemResults': []})
+        with self.assertRaises(AmbiguousResult):
+            api.create_media_batch([('a', 'a.jpg')], 'album-1')
+
+    def test_reordered_tokens_are_not_recorded_as_success(self):
+        api = self.api()
+        api.account = 'ccdphoto@ccdthailand.org'
+        api.session.request.return_value = self.response(200, {'newMediaItemResults': [
+            {'uploadToken': 'other', 'status': {}, 'mediaItem': {'id': 'wrong-media'}}]})
+        self.assertEqual(api.create_media_batch([('a', 'a.jpg')], 'album-1')[0]['state'], 'uncertain')
+
 
 if __name__ == '__main__':
     unittest.main()

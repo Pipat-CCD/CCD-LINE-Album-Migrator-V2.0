@@ -131,7 +131,7 @@ class App:
         self.tool_button.pack(anchor='w', pady=8)
         ttk.Label(settings, text=f'ข้อมูลและประวัติ: {self.data}\n'
                   'อย่าลบ state.sqlite3: ใช้ป้องกันอัปโหลดซ้ำ\n'
-                  'การ Pause รอคำขอที่กำลังทำอยู่จบก่อน ไม่ยกเลิก HTTP กลางคัน').pack(anchor='w', pady=10)
+                  'ส่ง bytes พร้อมกันสูงสุด 3 ไฟล์; Pause รอคำขอที่กำลังทำอยู่จบก่อน').pack(anchor='w', pady=10)
         self.root.protocol('WM_DELETE_WINDOW', self.close)
         self.restore_albums()
         self.load_history()
@@ -394,6 +394,7 @@ class App:
             version = validate_exiftool(tool)
             self.notify(f'ExifTool {version} พร้อมใช้งาน')
             ledger = Ledger(self.data / 'state.sqlite3')
+            api = None
             try:
                 api = PhotosAPI(authenticate(client, self.data / 'token.json')) if upload else None
                 with ExifToolSession(tool) as session:
@@ -403,6 +404,8 @@ class App:
                     total = sum(len(a.photos) for a in albums)
                     self.notify('Dry Run เสร็จ: เลือกอัลบั้ม แล้วกด “เปิดสำเนาที่แก้วันที่” เพื่อตรวจ Date modified', total, total)
             finally:
+                if api is not None:
+                    api.close()
                 ledger.close()
         self.launch(job)
 
@@ -410,7 +413,7 @@ class App:
         if self.busy():
             if self.control.running.is_set():
                 self.control.running.clear()
-                self.status.set('กำลังพัก: รอไฟล์ปัจจุบันเสร็จ แล้วหยุดก่อนไฟล์ถัดไป')
+                self.status.set('กำลังพัก: รอคำขอปัจจุบันจบ แล้วพักก่อนส่งไฟล์หรือสร้างชุดถัดไป')
             else:
                 self.control.running.set()
                 self.status.set('ทำต่อ')
