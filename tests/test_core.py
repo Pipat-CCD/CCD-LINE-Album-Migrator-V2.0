@@ -2,7 +2,8 @@ import os
 import tempfile
 import threading
 import unittest
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -140,11 +141,17 @@ class CoreTests(unittest.TestCase):
         for photo in scan(self.source):
             with self.subTest(path=photo.path):
                 before = digest(photo.path)
+                original_mtime = photo.path.stat().st_mtime_ns
                 target = prepare(photo, date(2025, 5, 9), self.root / 'out', os.environ['CCD_TEST_EXIFTOOL'])
                 actual = metadata(target, os.environ['CCD_TEST_EXIFTOOL'])
                 self.assertEqual(actual['DateTimeOriginal'], '2025:05:09 00:00:00')
                 self.assertEqual(actual['OffsetTimeOriginal'], '+07:00')
                 self.assertEqual(digest(photo.path), before)
+                self.assertEqual(photo.path.stat().st_mtime_ns, original_mtime)
+                expected = datetime(2025, 5, 9, tzinfo=ZoneInfo('Asia/Bangkok')).timestamp()
+                self.assertAlmostEqual(target.stat().st_mtime, expected, delta=2)
+                modified = datetime.fromtimestamp(target.stat().st_mtime, ZoneInfo('Asia/Bangkok'))
+                self.assertEqual(modified.isoformat(), '2025-05-09T00:00:00+07:00')
 
 
 class APITests(unittest.TestCase):

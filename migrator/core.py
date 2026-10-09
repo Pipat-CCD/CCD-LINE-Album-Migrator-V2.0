@@ -211,4 +211,13 @@ def prepare(photo: Photo, when: date, output: Path, tool: str) -> Path:
         raise RuntimeError('ต้นฉบับเปลี่ยนระหว่างทำงาน')
     if target.stat().st_size > 200 * 1024 * 1024:
         raise RuntimeError('สำเนาเกินขนาดรูป 200 MB ของ Google Photos')
+    # Set the filesystem timestamp last: ExifTool replaces the copy when writing.
+    # Windows Date modified is filesystem mtime, not the EXIF ModifyDate tag.
+    expected_ns = int(local.timestamp()) * 1_000_000_000
+    try:
+        os.utime(target, ns=(target.stat().st_atime_ns, expected_ns))
+    except OSError:
+        raise LocalSetupError('ตั้ง Date modified ของสำเนาไม่ได้ ตรวจสิทธิ์และระบบไฟล์ของโฟลเดอร์สำเนา') from None
+    if abs(target.stat().st_mtime_ns - expected_ns) > 2_000_000_000:
+        raise LocalSetupError('ตรวจ Date modified ของสำเนาไม่ผ่าน ยังไม่อนุญาตอัปโหลดไฟล์นี้')
     return target

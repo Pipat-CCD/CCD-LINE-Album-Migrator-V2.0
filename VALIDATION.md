@@ -7,6 +7,7 @@
 - `unittest discover`: 27 tests ผ่าน ไม่มี skip เมื่อกำหนด `CCD_TEST_EXIFTOOL` รวมการรับบัญชี `ccdphoto@ccdthailand.org` และปฏิเสธบัญชีปลายทางเดิมด้วย API mock
 - การแก้ TimeoutExpired: ตรวจชื่อ `exiftool(-k).exe` ก่อนเรียก, ปิด stdin, ตรวจ startup version, แสดงข้อความ timeout ที่ปลอดภัย และทดสอบ process ที่ค้างจริงแล้วถูกยุติเมื่อครบ timeout ไม่ใช่การทดสอบ ExifTool Windows launcher บน Windows จริง
 - เขียน metadata ด้วย ExifTool จริงใน JPEG, PNG ที่ไม่มี EXIF และ HEIC ที่แปลงเป็น JPEG: ตรวจอ่าน DateTimeOriginal, CreateDate, ModifyDate, OffsetTimeOriginal และตรวจ hash ต้นฉบับ
+- ตรวจ filesystem Date modified ของสำเนาให้เป็น `2025-05-09 00:00:00 Asia/Bangkok` และตรวจ Date modified ของต้นฉบับไม่เปลี่ยนบน Linux; การแสดงผล Windows Explorer ยังต้องทดสอบบน Windows
 - Dry Run 71 ภาพจำลอง: JPEG 60, PNG 10, HEIC 1 วันที่ `2025-05-09 00:00:00 +07:00` ตรวจ metadata ครบ 71 และ hash ต้นฉบับคงเดิม รันซ้ำผ่านและจำนวนสำเนายังเป็น 71
 - Batch 100 อัลบั้มพร้อม Resume โดย API mock: สร้างรายการ 100 ครั้ง รวมหลัง Resume ยัง 100 ครั้ง ไม่เรียกอัปโหลดไฟล์สำเร็จซ้ำ
 - Mock tests สำหรับบัญชีผิด, อีเมลไม่ยืนยัน, 429 retry, 5xx/timeout ที่ผลไม่แน่ชัด, การปกปิดข้อมูลลับใน exception, pause/cancel และล็อกหลาย instance
