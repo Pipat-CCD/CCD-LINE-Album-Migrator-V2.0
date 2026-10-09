@@ -8,13 +8,15 @@ if (!(Test-Path $zip) -or (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInva
     $sources = @(
         'https://sourceforge.net/projects/exiftool/files/exiftool-13.59_64.zip/download',
         'https://downloads.sourceforge.net/project/exiftool/exiftool-13.59_64.zip?download=1',
-        'https://master.dl.sourceforge.net/project/exiftool/exiftool-13.59_64.zip?viasf=1',
+        'https://master.dl.sourceforge.net/project/exiftool/exiftool-13.59_64.zip',
         'https://netix.dl.sourceforge.net/project/exiftool/exiftool-13.59_64.zip'
     )
     $failures = @()
     foreach ($source in $sources) {
         try {
-            Invoke-WebRequest $source -OutFile $zip -TimeoutSec 60 -UserAgent 'Mozilla/5.0 CCDLineMigratorBuild/2.0'
+            # curl avoids the .NET redirect error seen with SourceForge's master mirror.
+            & curl.exe --fail --location --max-time 60 --output $zip $source
+            if ($LASTEXITCODE -ne 0) { throw "HTTPS download failed (curl exit $LASTEXITCODE)" }
             $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($actual -eq $expected) { break }
             $failures += "$source returned $((Get-Item $zip).Length) bytes, SHA256=$actual"
