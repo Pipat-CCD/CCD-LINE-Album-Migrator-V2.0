@@ -3,6 +3,7 @@ name: Windows installer
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     tags: ['v*']
 
 permissions:
@@ -22,7 +23,14 @@ jobs:
           architecture: x64
       - name: Build app and installer with verified ExifTool
         shell: pwsh
-        run: ./build-installer.ps1
+        run: |
+          try { ./build-installer.ps1 }
+          catch {
+            $detail = "$($_.Exception.Message) at $($_.InvocationInfo.ScriptName):$($_.InvocationInfo.ScriptLineNumber)"
+            $detail = $detail.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Installer build failed::$detail"
+            throw
+          }
       - name: Test GUI and installed package
         shell: pwsh
         run: |
