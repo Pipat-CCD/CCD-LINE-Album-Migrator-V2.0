@@ -5,7 +5,26 @@ $expected = '44b512b25af500724ba579d0a53c8fc5851628b692dd5e5d94ae4a15c2cba9ec'
 New-Item -ItemType Directory -Force -Path $Destination | Out-Null
 $zip = Join-Path $Destination 'exiftool-13.59_64.zip'
 if (!(Test-Path $zip) -or (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
-    Invoke-WebRequest 'https://downloads.sourceforge.net/project/exiftool/exiftool-13.59_64.zip' -OutFile $zip
+    $sources = @(
+        'https://sourceforge.net/projects/exiftool/files/exiftool-13.59_64.zip/download',
+        'https://downloads.sourceforge.net/project/exiftool/exiftool-13.59_64.zip?download=1',
+        'https://master.dl.sourceforge.net/project/exiftool/exiftool-13.59_64.zip?viasf=1',
+        'https://netix.dl.sourceforge.net/project/exiftool/exiftool-13.59_64.zip'
+    )
+    $failures = @()
+    foreach ($source in $sources) {
+        try {
+            Invoke-WebRequest $source -OutFile $zip -TimeoutSec 60 -UserAgent 'Mozilla/5.0 CCDLineMigratorBuild/2.0'
+            $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -eq $expected) { break }
+            $failures += "$source returned $((Get-Item $zip).Length) bytes, SHA256=$actual"
+        } catch {
+            $failures += "$source failed: $($_.Exception.Message)"
+        }
+    }
+    if (!(Test-Path $zip) -or (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
+        throw ('No verified ExifTool download: ' + ($failures -join '; '))
+    }
 }
 if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
     throw 'ExifTool checksum failed. Do not use this download.'
