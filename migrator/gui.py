@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 import os
 import queue
+import subprocess
 import threading
 import tkinter as tk
+from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
+from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageTk
 
@@ -21,6 +24,13 @@ def data_directory():
     path = root / 'CCDLineMigrator'
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def open_directory(path: Path):
+    if os.name == 'nt':
+        os.startfile(str(path))
+    else:
+        subprocess.Popen(['xdg-open', str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 class App:
@@ -84,6 +94,11 @@ class App:
             self.table.heading(key, text=title)
             self.table.column(key, width=140)
         self.table.pack(fill='x')
+        copies_row = ttk.Frame(dashboard)
+        copies_row.pack(fill='x', pady=6)
+        self.copies_button = ttk.Button(copies_row, text='เปิดสำเนาที่แก้วันที่', command=self.open_copies)
+        self.copies_button.pack(side='left')
+        ttk.Label(copies_row, text='เลือกอัลบั้มก่อนเปิด • รูปในโฟลเดอร์ต้นฉบับจะไม่เปลี่ยน').pack(side='left', padx=8)
         self.actions = ttk.Frame(dashboard)
         self.actions.pack(fill='x', pady=8)
         self.dry_button = ttk.Button(self.actions, text='Dry Run (สร้างสำเนา + ตรวจวันที่)', command=lambda: self.start(False))
@@ -272,7 +287,9 @@ class App:
         if not selected:
             return
         album = self.albums[selected[0]]
-        filename = filedialog.askopenfilename(initialdir=album.folder, title='เลือกภาพเพื่อดู Preview')
+        copies = self.data / 'copies' / album.key
+        folder = copies if copies.is_dir() else album.folder
+        filename = filedialog.askopenfilename(initialdir=folder, title='ตรวจสำเนาที่แก้วันที่' if folder == copies else 'ดูต้นฉบับ (ยังไม่ได้สร้างสำเนา)')
         if not filename:
             return
         try:
@@ -284,10 +301,30 @@ class App:
             label.image = preview
             label.pack()
             current = metadata(Path(filename), find_exiftool(self.tool.get()))
-            ttk.Label(window, text=json.dumps(current, ensure_ascii=False, indent=2) +
+            modified = datetime.fromtimestamp(Path(filename).stat().st_mtime, ZoneInfo('Asia/Bangkok'))
+            kind = 'สำเนา' if Path(filename).resolve().is_relative_to(copies.resolve()) else 'ต้นฉบับ/ไฟล์ที่เลือก'
+            ttk.Label(window, text=f'{kind}: {filename}\nDate modified (Bangkok): {modified.isoformat()}\n' +
+                      json.dumps(current, ensure_ascii=False, indent=2) +
                       f'\nวันที่สำเนาที่จะเขียน: {album.when.isoformat()} 00:00:00 +07:00').pack()
         except Exception as exc:
             messagebox.showerror('Preview ไม่สำเร็จ', str(exc) if isinstance(exc, LocalSetupError) else type(exc).__name__)
+
+    def open_copies(self):
+        if self.busy():
+            messagebox.showinfo('สำเนา', 'รอ Dry Run เสร็จก่อนตรวจสำเนา')
+            return
+        selected = self.table.selection()
+        if len(selected) != 1:
+            messagebox.showinfo('สำเนา', 'เลือกหนึ่งอัลบั้มในตารางก่อนเปิดโฟลเดอร์สำเนา')
+            return
+        folder = self.data / 'copies' / self.albums[selected[0]].key
+        if not folder.is_dir():
+            messagebox.showinfo('สำเนา', 'ยังไม่มีสำเนาของอัลบั้มและวันที่นี้ กรุณากด Dry Run ให้สำเร็จก่อน')
+            return
+        try:
+            open_directory(folder)
+        except OSError:
+            messagebox.showinfo('เปิดโฟลเดอร์ไม่ได้', f'เปิดโฟลเดอร์นี้ด้วยตนเอง:\n{folder}')
 
     def notify(self, message, done=0, total=1):
         self.events.put(('progress', message, done, total))
@@ -361,6 +398,8 @@ class App:
                 run(albums, ledger, self.data / 'copies', tool, self.control, self.notify, api)
                 if not upload and not self.control.cancelled.is_set():
                     self.events.put(('dry_ready',))
+                    total = sum(len(a.photos) for a in albums)
+                    self.notify('Dry Run เสร็จ: เลือกอัลบั้ม แล้วกด “เปิดสำเนาที่แก้วันที่” เพื่อตรวจ Date modified', total, total)
             finally:
                 ledger.close()
         self.launch(job)

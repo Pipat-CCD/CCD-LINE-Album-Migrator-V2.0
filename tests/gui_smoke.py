@@ -29,6 +29,18 @@ with tempfile.TemporaryDirectory() as temporary:
         root.update()
         time.sleep(0.02)
     assert app.dry_ready, app.status.get()
+    app.table.selection_set(str(source.resolve()))
+    with patch('migrator.gui.open_directory') as opened:
+        app.open_copies()
+        copies = app.data / 'copies' / app.albums[str(source.resolve())].key
+        opened.assert_called_once_with(copies)
+        assert copies.is_dir()
+        assert list(copies.glob('*.png')), 'opened copy folder has no prepared photos'
+    app.table.selection_remove(*app.table.selection())
+    with patch('migrator.gui.messagebox.showinfo') as info, patch('migrator.gui.open_directory') as opened:
+        app.open_copies()
+        info.assert_called_once()
+        opened.assert_not_called()
     with patch('migrator.gui.messagebox.askyesno', return_value=False) as confirmation:
         app.start(True)
         confirmation.assert_called_once()
@@ -42,4 +54,4 @@ with tempfile.TemporaryDirectory() as temporary:
     assert len(restored.albums) == 1, 'persisted albums were not restored'
     assert not restored.dry_ready, 'restart must require a fresh dry run'
     restored.close()
-    print('GUI smoke passed: real Tk widgets, Dry Run, cancelled upload, history, restart restore')
+    print('GUI smoke passed: real Tk widgets, Dry Run, correct copy folder opening, cancelled upload, history, restart restore')
