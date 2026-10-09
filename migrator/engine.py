@@ -109,11 +109,11 @@ def run(albums, ledger: Ledger, output: Path, tool: str, control: Control, notif
                 else:
                     ledger.record(album.key, photo, 'prepared')
                 notify(f'{"อัปโหลด" if api else "ตรวจสำเนา"} สำเร็จ: {photo.path.name}', done, total)
-            except AmbiguousResult:
-                ledger.record(album.key, photo, 'uncertain', message='ต้องตรวจสอบผลจริงก่อน retry')
+            except AmbiguousResult as exc:
+                ledger.record(album.key, photo, 'uncertain', message=str(exc))
                 raise
-            except SafeAPIError:
-                ledger.record(album.key, photo, 'failed', message='Google ปฏิเสธคำขอ')
+            except SafeAPIError as exc:
+                ledger.record(album.key, photo, 'failed', message=str(exc))
                 raise
             except LocalSetupError as exc:
                 ledger.record(album.key, photo, 'failed', message=str(exc))

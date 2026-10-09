@@ -11,7 +11,7 @@ from PIL import Image
 from migrator.core import Ledger, digest, scan, reusable_copy
 from migrator.engine import Album, Control, run
 from migrator.exiftool_session import ExifToolSession
-from migrator.google_photos import AmbiguousResult, SafeAPIError
+from migrator.google_photos import AmbiguousResult, GoogleHTTPError, SafeAPIError
 
 
 class FakeAPI:
@@ -47,6 +47,8 @@ class FakeAPI:
         if self.control:
             self.control.cancelled.set()
             self.control.running.set()
+        if self.mode == 'raw409':
+            raise GoogleHTTPError(409, 'ส่งไฟล์ (bytes)', 'ABORTED')
         return target.name
 
     def create_media_batch(self, items, album_id):
@@ -129,6 +131,19 @@ class PipelineTests(unittest.TestCase):
         self.execute(album, api, control)
         self.assertEqual(api.created, 0)
         self.assertTrue(all(self.ledger.state(album.key, p.sha256) == 'prepared' for p in album.photos))
+
+    def test_raw409_creates_no_media_and_records_safe_diagnostics(self):
+        album = self.album(20)
+        api = FakeAPI(self.ledger, album)
+        api.mode = 'raw409'
+        with self.assertRaises(GoogleHTTPError):
+            self.execute(album, api)
+        self.assertEqual(api.created, 0)
+        self.assertEqual(api.active, 0)
+        self.assertFalse(any(self.ledger.state(album.key, p.sha256) in ('uploaded', 'creating') for p in album.photos))
+        messages = self.ledger.db.execute("SELECT message FROM photos WHERE state='failed'").fetchall()
+        self.assertTrue(messages)
+        self.assertTrue(all('409' in row[0] and 'ส่งไฟล์ (bytes)' in row[0] for row in messages))
 
     @unittest.skipUnless(os.environ.get('CCD_TEST_EXIFTOOL'), 'requires real ExifTool')
     def test_real_dry_run_cache_reused_without_rewriting_or_losing_dates(self):

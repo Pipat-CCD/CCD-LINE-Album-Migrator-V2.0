@@ -12,6 +12,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageTk
+from . import __version__
 
 from .core import Ledger, LocalSetupError, album_date, find_exiftool, metadata, scan, validate_exiftool
 from .engine import Album, Control, run
@@ -37,7 +38,7 @@ def open_directory(path: Path):
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title('CCD LINE Album Migrator V2.0')
+        self.root.title(f'CCD LINE Album Migrator V2.0 — build {__version__}')
         self.root.geometry('1100x750')
         self.data = data_directory()
         self.instance_lock = InstanceLock(self.data / 'instance.lock')
@@ -75,6 +76,7 @@ class App:
         toolbar = ttk.Frame(history)
         toolbar.pack(fill='x')
         ttk.Button(toolbar, text='โหลดประวัติ', command=self.load_history).pack(side='left')
+        ttk.Button(toolbar, text='ดูรายละเอียด', command=self.history_detail).pack(side='left')
         ttk.Button(toolbar, text='ยืนยันภาพมีอยู่แล้ว', command=lambda: self.reconcile(True)).pack(side='left')
         ttk.Button(toolbar, text='ยืนยันไม่มี / อนุญาต retry', command=lambda: self.reconcile(False)).pack(side='left')
         self.status = tk.StringVar(value='เลือกโฟลเดอร์ แล้วตรวจสอบวันที่ก่อน Dry Run')
@@ -203,6 +205,22 @@ class App:
             ledger.close()
         self.dry_ready = False
         self.load_history()
+
+    def history_detail(self):
+        selected = self.history.selection()
+        if len(selected) != 1:
+            return
+        kind, key, sha, state = self.history_rows[selected[0]]
+        ledger = Ledger(self.data / 'state.sqlite3')
+        try:
+            if kind == 'photo':
+                row = ledger.db.execute('SELECT state,message FROM photos WHERE album=? AND sha=?', (key, sha)).fetchone()
+                text = f'สถานะ: {row[0]}\n{row[1] or "ไม่มีข้อความข้อผิดพลาด"}' if row else 'ไม่พบรายการ'
+            else:
+                text = f'สถานะอัลบั้ม: {state}\nหาก creating ให้ตรวจผลบน Google Photos ก่อนอนุญาต retry'
+            messagebox.showinfo('รายละเอียดงาน', text)
+        finally:
+            ledger.close()
 
     def choose_file(self, variable):
         if self.busy():

@@ -63,6 +63,8 @@ def upload_album(album, ledger, output, tool, control, notify, api, remote_id,
                 first_error = None
                 chunk_start = time.monotonic()
                 for future in as_completed(futures):
+                    if future.cancelled():
+                        continue
                     index = futures[future]
                     photo, target = prepared[index]
                     try:
@@ -74,9 +76,13 @@ def upload_album(album, ledger, output, tool, control, notify, api, remote_id,
                             notify(f'ส่ง bytes แล้ว {len(uploaded)}/{len(prepared)} ภาพ '
                                    f'({size / 1048576 / seconds:.2f} MB/s) ยังรอยืนยัน Google', done, total)
                     except Exception as exc:
-                        ledger.record(album.key, photo, 'failed', message='ส่ง bytes ไม่สำเร็จ')
+                        message = str(exc) if isinstance(exc, SafeAPIError) else 'ส่ง bytes ไม่สำเร็จ'
+                        ledger.record(album.key, photo, 'failed', message=message)
                         if first_error is None:
                             first_error = exc
+                            notify('ส่งไฟล์ขัดข้อง: หยุดคิวที่ยังไม่เริ่ม รอคำขอปัจจุบันจบก่อนแสดงผล', done, total)
+                            for queued in futures:
+                                queued.cancel()
                 if first_error:
                     # No media creation for this chunk; raw bytes alone create no photos.
                     raise first_error
@@ -91,13 +97,13 @@ def upload_album(album, ledger, output, tool, control, notify, api, remote_id,
                     results = api.create_media_batch(items, remote_id)
                     if not isinstance(results, list) or len(results) != len(prepared):
                         raise AmbiguousResult('ผลชุดอัปโหลดไม่ครบ ต้องตรวจสอบก่อน Resume')
-                except AmbiguousResult:
+                except AmbiguousResult as exc:
                     for photo, _ in prepared:
-                        ledger.record(album.key, photo, 'uncertain', message='ผลสร้างชุดภาพไม่แน่ชัด')
+                        ledger.record(album.key, photo, 'uncertain', message=str(exc))
                     raise
-                except SafeAPIError:
+                except SafeAPIError as exc:
                     for photo, _ in prepared:
-                        ledger.record(album.key, photo, 'failed', message='Google ปฏิเสธสร้างชุดภาพ')
+                        ledger.record(album.key, photo, 'failed', message=str(exc))
                     raise
                 uncertain = failed = False
                 for (photo, _), result in zip(prepared, results):

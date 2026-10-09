@@ -2,6 +2,7 @@ if __name__ == '__main__':
     import argparse
     import json
     from pathlib import Path
+    from migrator import __version__
     from migrator.core import Ledger, album_date, find_exiftool, scan, validate_exiftool
     from migrator.engine import Album, Control, run
     from migrator.exiftool_session import ExifToolSession
@@ -16,7 +17,7 @@ if __name__ == '__main__':
     if args.self_check:
         tool = find_exiftool(args.exiftool)
         version = validate_exiftool(tool)
-        result = json.dumps({'exiftool': version, 'date_parser': album_date('9-5-68').isoformat()})
+        result = json.dumps({'app_version': __version__, 'exiftool': version, 'date_parser': album_date('9-5-68').isoformat()})
         if args.check_output:
             args.check_output.write_text(result, encoding='utf-8')
         else:

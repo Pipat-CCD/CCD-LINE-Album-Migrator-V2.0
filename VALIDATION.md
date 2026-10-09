@@ -4,7 +4,7 @@
 
 สภาพแวดล้อม Linux, Python 3.12.14, ExifTool 13.59 จาก official Git tag `13.59`, commit `2200871d9cef988051d2a99d67df3bda6cbb30a8` ใช้ TLS และไม่ปิดการตรวจสอบความถูกต้อง
 
-- `unittest discover`: 39 tests ผ่าน ไม่มี skip เมื่อกำหนด `CCD_TEST_EXIFTOOL` รวมการรับบัญชี `ccdphoto@ccdthailand.org` และปฏิเสธบัญชีปลายทางเดิมด้วย API mock
+- `unittest discover`: 45 tests ผ่าน ไม่มี skip เมื่อกำหนด `CCD_TEST_EXIFTOOL` รวมการรับบัญชี `ccdphoto@ccdthailand.org` และปฏิเสธบัญชีปลายทางเดิมด้วย API mock
 - การแก้ TimeoutExpired: ตรวจชื่อ `exiftool(-k).exe` ก่อนเรียก, ปิด stdin, ตรวจ startup version, แสดงข้อความ timeout ที่ปลอดภัย และทดสอบ process ที่ค้างจริงแล้วถูกยุติเมื่อครบ timeout ไม่ใช่การทดสอบ ExifTool Windows launcher บน Windows จริง
 - เขียน metadata ด้วย ExifTool จริงใน JPEG, PNG ที่ไม่มี EXIF และ HEIC ที่แปลงเป็น JPEG: ตรวจอ่าน DateTimeOriginal, CreateDate, ModifyDate, OffsetTimeOriginal และตรวจ hash ต้นฉบับ
 - ตรวจ filesystem Date modified ของสำเนาให้เป็น `2025-05-09 00:00:00 Asia/Bangkok` และตรวจ Date modified ของต้นฉบับไม่เปลี่ยนบน Linux; การแสดงผล Windows Explorer ยังต้องทดสอบบน Windows
@@ -18,6 +18,7 @@
 - Persistent ExifTool: ใช้ process ID เดิมสำหรับหลายภาพและหลายคำสั่ง ตรวจ status ของทุกคำสั่ง รวมชื่อไฟล์/โฟลเดอร์ภาษาไทย คำสั่งผิดไม่ถูกนับเป็นผ่าน timeout ยุติ process และ context ปิด process หลังงาน
 - Upload pipeline ด้วย API จำลอง 71 ภาพ: ส่ง bytes พร้อมกันจริงใน threads สูงสุด 3, เรียก batchCreate แบบ serial 4 ชุด (20/20/20/11), บันทึก creating ทั้งชุดก่อนส่ง, Resume ไม่ส่งสำเร็จซ้ำ, แยกผล partial, หยุดผล ambiguous, ยกเลิกหลังส่ง bytes แล้วไม่สร้าง media
 - Cache สำเนา: Dry Run จริงกับ ExifTool แล้วใช้สำเนาเดิมโดยไม่เรียก prepare ซ้ำใน pipeline API mock; ตรวจ hash/metadata/mtime ก่อนใช้ และปฏิเสธสำเนาที่ถูกแก้หรือเสียหาย การทดสอบนี้ไม่ยืนยันความเร็ว Google Photos จริง
+- HTTP diagnostics/retry tests: raw upload 409/403 ไม่ retry, transient retry rewind ส่งข้อมูลครบ, 429 จำกัด 5 ครั้งโดยไม่มี loop ซ้อน, 409 ของ batchCreate บันทึกเป็นผลไม่แน่ชัดและไม่ retry อัตโนมัติ ไม่เปิดเผยข้อความ/token จาก response การทดสอบใช้ API mock และไม่ยืนยันสาเหตุ 409 บนเครื่องผู้ใช้
 - วัดเวลา prepare 71 ภาพจำลอง (JPEG 60, PNG 10, HEIC 1): แบบเปิด process ต่อคำสั่ง 21.916 วินาที; แบบ persistent 0.799 วินาที (~27.43 เท่า) บน Linux เดียวกัน รัน baseline ก่อน persistent โดยไม่รวม scan, GUI หรือ network ตัวเลขนี้ไม่รับประกันความเร็วบน Windows/รูปจริง และไม่ใช่ benchmark หลายรอบ
 
 ## สิ่งที่ยังไม่ทดสอบ

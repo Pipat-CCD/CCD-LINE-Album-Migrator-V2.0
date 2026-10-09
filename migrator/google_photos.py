@@ -25,6 +25,37 @@ class AmbiguousResult(SafeAPIError):
     """A mutating request may have succeeded; automatic retry is unsafe."""
 
 
+class GoogleHTTPError(SafeAPIError):
+    def __init__(self, code, operation, google_status=''):
+        self.status_code = code
+        self.operation = operation
+        self.google_status = google_status
+        detail = f' [{google_status}]' if google_status else ''
+        message = f'Google HTTP {code}{detail} ขณะ{operation}'
+        if code == 409:
+            message += (' — Google แจ้งข้อขัดแย้ง ยังระบุสาเหตุแน่ชัดไม่ได้ '
+                        'หยุดงานอัปโหลดอื่นที่ใช้บัญชีเดียวกันก่อน แล้วตรวจประวัติและทำต่อจาก Resume '
+                        'ไม่ต้องลบประวัติหรือเริ่มใหม่')
+        super().__init__(message)
+
+
+def http_error(response, url):
+    operations = {BASE + '/uploads': 'ส่งไฟล์ (bytes)', BASE + '/mediaItems:batchCreate': 'สร้างรูปในอัลบั้ม',
+                  BASE + '/albums': 'สร้างอัลบั้ม',
+                  'https://openidconnect.googleapis.com/v1/userinfo': 'ตรวจบัญชี'}
+    allowed = {'ABORTED', 'ALREADY_EXISTS', 'FAILED_PRECONDITION', 'INVALID_ARGUMENT',
+               'PERMISSION_DENIED', 'UNAUTHENTICATED', 'NOT_FOUND', 'RESOURCE_EXHAUSTED',
+               'INTERNAL', 'UNAVAILABLE', 'DEADLINE_EXCEEDED'}
+    status = ''
+    try:
+        value = response.json()['error']['status']
+        if isinstance(value, str) and value in allowed:
+            status = value
+    except (ValueError, TypeError, KeyError):
+        pass
+    return GoogleHTTPError(response.status_code, operations.get(url, 'เรียก Google API'), status)
+
+
 def authenticate(client: Path, token: Path, interactive=False) -> Credentials:
     credentials = None
     if token.exists():
@@ -114,7 +145,10 @@ class PhotosAPI:
                     self.sleep(2 ** attempt)
                     continue
             if not response.ok:
-                raise SafeAPIError(f'Google HTTP {response.status_code} (ไม่บันทึก response เพื่อป้องกันข้อมูลลับ)')
+                error = http_error(response, url)
+                if response.status_code == 409 and mutating:
+                    raise AmbiguousResult(str(error) + ' — ผลการสร้างไม่แน่ชัด ต้องตรวจสอบก่อน retry')
+                raise error
             return response
         raise SafeAPIError('เกินจำนวน retry')
 
@@ -147,21 +181,16 @@ class PhotosAPI:
 
     def upload(self, path: Path):
         self._require_account()
-        # Byte upload does not create a media item; retry opens a fresh stream.
-        for attempt in range(5):
-            try:
-                with path.open('rb') as stream:
-                    response = self.request('POST', BASE + '/uploads', data=stream,
-                        headers={'Content-Type': 'application/octet-stream', 'X-Goog-Upload-Protocol': 'raw',
-                                 'X-Goog-Upload-File-Name': path.name})
-                token = response.text.strip()
-                if not token:
-                    raise SafeAPIError('ไม่ได้รับ upload token')
-                return token
-            except SafeAPIError:
-                if attempt == 4:
-                    raise
-                self.sleep(2 ** attempt)
+        # Retry transient transport/429/5xx only, rewind the same open stream.
+        # No blanket retries for 4xx, and no nested loops multiplying retries.
+        with path.open('rb') as stream:
+            response = self.request('POST', BASE + '/uploads', retry=True, data=stream,
+                headers={'Content-Type': 'application/octet-stream', 'X-Goog-Upload-Protocol': 'raw',
+                         'X-Goog-Upload-File-Name': path.name})
+        token = response.text.strip()
+        if not token:
+            raise SafeAPIError('ไม่ได้รับ upload token จึงไม่สร้างรูป')
+        return token
 
     def create_media(self, upload_token, album_id, filename):
         result = self.create_media_batch([(upload_token, filename)], album_id)[0]

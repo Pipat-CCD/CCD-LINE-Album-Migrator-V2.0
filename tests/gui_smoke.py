@@ -47,6 +47,11 @@ with tempfile.TemporaryDirectory() as temporary:
         assert not app.busy(), 'cancelled confirmation started a worker'
     app.load_history()
     assert len(app.history.get_children()) == 1
+    app.history.selection_set(app.history.get_children()[0])
+    with patch('migrator.gui.messagebox.showinfo') as info:
+        app.history_detail()
+        info.assert_called_once()
+        assert 'prepared' in info.call_args.args[1]
     app.close()
     root = tk.Tk()
     restored = App(root)
