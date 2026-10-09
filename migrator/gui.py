@@ -86,14 +86,14 @@ class App:
         self.edit_buttons = []
         for label, command in [('เพิ่มอัลบั้ม', self.add_one), ('เพิ่มหลายอัลบั้ม', self.add_batch),
                                ('แก้วันที่', self.edit_date), ('ลบจากรายการ', self.remove),
-                               ('Preview / metadata', self.preview)]:
+                               ('Preview / metadata', self.preview), ('เลือกอัลบั้มปลายทาง', self.choose_destination)]:
             button = ttk.Button(buttons, text=label, command=command)
             button.pack(side='left', padx=3)
             self.edit_buttons.append(button)
-        self.table = ttk.Treeview(dashboard, columns=('date', 'count', 'bad', 'dup'), height=9)
+        self.table = ttk.Treeview(dashboard, columns=('date', 'count', 'bad', 'dup', 'destination'), height=9)
         self.table.heading('#0', text='อัลบั้ม / โฟลเดอร์')
         for key, title in [('date', 'วันที่ ค.ศ. (ยืนยันแล้ว)'), ('count', 'จำนวนรูป'),
-                           ('bad', 'ไฟล์เสีย'), ('dup', 'ซ้ำในอัลบั้ม')]:
+                           ('bad', 'ไฟล์เสีย'), ('dup', 'ซ้ำในอัลบั้ม'), ('destination', 'อัลบั้มปลายทาง')]:
             self.table.heading(key, text=title)
             self.table.column(key, width=140)
         self.table.pack(fill='x')
@@ -140,7 +140,9 @@ class App:
         self.poll_id = self.root.after(100, self.poll)
 
     def save_albums(self):
-        values = [{'folder': str(a.folder.resolve()), 'date': a.when.isoformat()} for a in self.albums.values()]
+        values = [{'folder': str(a.folder.resolve()), 'date': a.when.isoformat(),
+                   'destination_title': a.destination_title, 'destination_id': a.destination_id}
+                  for a in self.albums.values()]
         path = self.data / 'albums.json'
         temporary = path.with_suffix('.tmp')
         temporary.write_text(json.dumps(values, ensure_ascii=False), encoding='utf-8')
@@ -154,7 +156,8 @@ class App:
             for item in json.loads(path.read_text(encoding='utf-8')):
                 folder = Path(item['folder'])
                 if folder.is_dir():
-                    self.insert_album(folder, album_date(item['date']))
+                    self.insert_album(folder, album_date(item['date']),
+                                      item.get('destination_title', ''), item.get('destination_id', ''))
         except (OSError, ValueError, KeyError, TypeError):
             self.status.set('อ่านรายการเดิมไม่ครบ กรุณาเลือกโฟลเดอร์ใหม่')
 
@@ -262,13 +265,13 @@ class App:
             self.insert_album(folder, when)
             self.save_albums()
 
-    def insert_album(self, folder, when):
+    def insert_album(self, folder, when, destination_title='', destination_id=''):
         key = str(folder.resolve())
         photos = scan(folder)
-        self.albums[key] = Album(folder, when, photos)
+        self.albums[key] = Album(folder, when, photos, destination_title, destination_id)
         self.table.insert('', 'end', iid=key, text=folder.name,
                           values=(when.isoformat(), len(photos), sum(bool(p.error) for p in photos),
-                                  sum(p.duplicate for p in photos)))
+                                  sum(p.duplicate for p in photos), destination_title or folder.name))
         self.dry_ready = False
         self.status.set(f'{len(self.albums)} อัลบั้ม / {sum(len(a.photos) for a in self.albums.values())} รูป')
 
@@ -300,6 +303,70 @@ class App:
             self.table.delete(key)
         self.dry_ready = False
         self.save_albums()
+
+    def choose_destination(self):
+        selected = self.table.selection()
+        if self.busy() or not selected:
+            return
+        window = tk.Toplevel(self.root)
+        window.title('เลือกอัลบั้มปลายทาง')
+        window.transient(self.root)
+        window.grab_set()
+        ttk.Label(window, text='ใช้กับอัลบั้มต้นทางที่เลือกทั้งหมด • วันที่ภาพยังแยกตามต้นทาง\n'
+                  'Google Photos ไม่มีโฟลเดอร์ซ้อน เลือกได้เฉพาะอัลบั้มที่แอปเคยสร้าง').pack(padx=16, pady=12)
+        mode = tk.StringVar(value='existing')
+        for value, label in [('original', 'แยกอัลบั้มตามชื่อเดิม'), ('new', 'รวมเข้าอัลบั้มชื่อเดียว'),
+                             ('existing', 'ใช้อัลบั้มที่แอปเคยสร้าง')]:
+            ttk.Radiobutton(window, text=label, variable=mode, value=value).pack(anchor='w', padx=16)
+        title = tk.StringVar(value=self.albums[selected[0]].destination_title or 'CCD ปี 2025')
+        ttk.Entry(window, textvariable=title, width=50).pack(padx=16, pady=8)
+        ledger = Ledger(self.data / 'state.sqlite3')
+        try:
+            known = ledger.db.execute("SELECT title,remote_id FROM albums WHERE state='ready' AND remote_id IS NOT NULL ORDER BY title").fetchall()
+        finally:
+            ledger.close()
+        destinations = {}
+        for name, remote_id in known:
+            destinations.setdefault(remote_id, name)
+        choices = list(destinations.items())
+        box = ttk.Combobox(window, state='readonly', width=50,
+                           values=[f'{name} ({remote_id[:8]}…)' for remote_id, name in choices])
+        box.pack(padx=16, pady=8)
+        if choices:
+            box.current(0)
+
+        def apply():
+            target_title, target_id = '', ''
+            if mode.get() == 'new':
+                target_title = title.get().strip()
+                if not target_title or len(target_title) > 500:
+                    messagebox.showwarning('ชื่ออัลบั้ม', 'กรุณาระบุชื่อ 1–500 ตัวอักษร', parent=window)
+                    return
+            elif mode.get() == 'existing':
+                if box.current() < 0:
+                    messagebox.showwarning('ไม่มีอัลบั้ม', 'ยังไม่มีอัลบั้มที่แอปสร้างในประวัติ', parent=window)
+                    return
+                target_id, target_title = choices[box.current()]
+            # Retargeting uploaded jobs must never silently cause a second upload.
+            ledger = Ledger(self.data / 'state.sqlite3')
+            try:
+                for key in selected:
+                    album = self.albums[key]
+                    if (album.destination_title, album.destination_id) != (target_title, target_id):
+                        exists = ledger.db.execute("SELECT 1 FROM photos WHERE album=? AND state IN ('uploaded','confirmed_manual','creating','uncertain') LIMIT 1", (album.key,)).fetchone()
+                        if exists:
+                            messagebox.showwarning('มีประวัติอัปโหลด', 'เปลี่ยนปลายทางงานที่ส่งแล้วไม่ได้ เพื่อป้องกันรูปซ้ำ\nเลือกปลายทางก่อน Dry Run และอัปโหลด', parent=window)
+                            return
+            finally:
+                ledger.close()
+            for key in selected:
+                album = self.albums[key]
+                album.destination_title, album.destination_id = target_title, target_id
+                self.table.set(key, 'destination', album.title)
+            self.dry_ready = False
+            self.save_albums()
+            window.destroy()
+        ttk.Button(window, text='ใช้ปลายทางนี้', command=apply).pack(pady=12)
 
     def preview(self):
         selected = self.table.selection()
@@ -395,7 +462,8 @@ class App:
             messagebox.showwarning('ต้อง Dry Run ก่อน', 'กรุณาตรวจสำเนาและ metadata ให้ผ่านก่อนอัปโหลด')
             return
         if upload and not messagebox.askyesno('ยืนยันอัปโหลดจริง',
-            f'จะอัปโหลด {len(self.albums)} อัลบั้ม ไป ccdphoto@ccdthailand.org\n'
+            f'จะอัปโหลด {len(self.albums)} อัลบั้มต้นทาง ไป ccdphoto@ccdthailand.org\n'
+            'ปลายทาง: ' + ', '.join(sorted({a.title for a in self.albums.values()})) + '\n'
             'Google Photos อาจคิดพื้นที่จัดเก็บ ต้องการดำเนินการหรือไม่?'):
             return
         try:

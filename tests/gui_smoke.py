@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from PIL import Image
 from migrator.gui import App
-from migrator.core import album_date
+from migrator.core import album_date, Ledger
 
 
 with tempfile.TemporaryDirectory() as temporary:
@@ -52,11 +52,39 @@ with tempfile.TemporaryDirectory() as temporary:
         app.history_detail()
         info.assert_called_once()
         assert 'prepared' in info.call_args.args[1]
+    ledger = Ledger(app.data / 'state.sqlite3')
+    ledger.db.execute('INSERT INTO albums VALUES(?,?,?,?)', ('fixture-old', 'CCD ปี 2025', 'fixture-remote', 'ready'))
+    ledger.db.commit()
+    ledger.close()
+    app.table.selection_set(str(source.resolve()))
+    app.choose_destination()
+    root.update()
+    dialog = next(w for w in root.winfo_children() if isinstance(w, tk.Toplevel))
+    apply_button = next(w for w in dialog.winfo_children() if w.winfo_class() == 'TButton')
+    apply_button.invoke()
+    assert app.albums[str(source.resolve())].destination_id == 'fixture-remote'
+    assert app.table.set(str(source.resolve()), 'destination') == 'CCD ปี 2025'
+    assert not app.dry_ready, 'destination changes must require a new dry run'
+    album = app.albums[str(source.resolve())]
+    ledger = Ledger(app.data / 'state.sqlite3')
+    ledger.record(album.key, album.photos[0], 'uploaded', 'fixture-media')
+    ledger.close()
+    app.choose_destination()
+    root.update()
+    dialog = next(w for w in root.winfo_children() if isinstance(w, tk.Toplevel))
+    radios = [w for w in dialog.winfo_children() if w.winfo_class() == 'TRadiobutton']
+    radios[0].invoke()
+    with patch('migrator.gui.messagebox.showwarning') as warning:
+        next(w for w in dialog.winfo_children() if w.winfo_class() == 'TButton').invoke()
+        warning.assert_called_once()
+    assert album.destination_id == 'fixture-remote', 'uploaded job was silently retargeted'
+    dialog.destroy()
     app.close()
     root = tk.Tk()
     restored = App(root)
     root.update()
     assert len(restored.albums) == 1, 'persisted albums were not restored'
+    assert next(iter(restored.albums.values())).destination_id == 'fixture-remote'
     assert not restored.dry_ready, 'restart must require a fresh dry run'
     restored.close()
     print('GUI smoke passed: real Tk widgets, Dry Run, correct copy folder opening, cancelled upload, history, restart restore')

@@ -18,10 +18,25 @@ class Album:
     folder: Path
     when: date
     photos: list[Photo]
+    destination_title: str = ''
+    destination_id: str = ''
+
+    @property
+    def title(self):
+        return self.destination_title or self.folder.name
+
+    @property
+    def destination_key(self):
+        if not self.destination_title:
+            return self.key
+        identity = self.destination_id or self.destination_title
+        return 'destination:' + hashlib.sha256((EXPECTED_ACCOUNT + '|' + identity).encode()).hexdigest()
 
     @property
     def key(self):
         text = EXPECTED_ACCOUNT + '|' + str(self.folder.resolve()) + '|' + self.when.isoformat()
+        if self.destination_title:
+            text += '|destination:' + (self.destination_id or self.destination_title)
         return hashlib.sha256(text.encode()).hexdigest()
 
 
@@ -52,24 +67,37 @@ def run(albums, ledger: Ledger, output: Path, tool: str, control: Control, notif
         if api and any(ledger.state(album.key, p.sha256) in ('creating', 'uncertain') for p in valid):
             raise AmbiguousResult('มีไฟล์ที่ผลอัปโหลดไม่แน่ชัด ห้าม Resume จนกว่าจะตรวจสอบกับ Google Photos')
         if api and any(ledger.state(album.key, p.sha256) not in DONE_STATES for p in valid):
-            row = ledger.db.execute('SELECT remote_id,state FROM albums WHERE key=?', (album.key,)).fetchone()
+            destination_key = album.destination_key
+            row = ledger.db.execute('SELECT remote_id,state FROM albums WHERE key=?', (destination_key,)).fetchone()
             if row and row[1] not in ('ready', 'failed'):
                 raise AmbiguousResult('ผลสร้างอัลบั้มไม่แน่ชัด ต้องตรวจสอบก่อนทำต่อ')
             if row and row[1] == 'ready':
                 remote_id = row[0]
             else:
-                ledger.db.execute('INSERT OR REPLACE INTO albums VALUES(?,?,NULL,?)', (album.key, album.folder.name, 'creating'))
+                ledger.db.execute('INSERT OR REPLACE INTO albums VALUES(?,?,NULL,?)', (destination_key, album.title, 'creating'))
                 ledger.db.commit()
                 # Keep "creating" on any failure: safest after crash or lost response.
                 try:
-                    remote_id = api.create_album(album.folder.name)
+                    if album.destination_id:
+                        # Only accept an ID previously recorded by this application.
+                        known = ledger.db.execute('SELECT 1 FROM albums WHERE remote_id=? AND state=?',
+                                                  (album.destination_id, 'ready')).fetchone()
+                        if not known:
+                            raise SafeAPIError('อัลบั้มปลายทางนี้ไม่อยู่ในประวัติที่แอปสร้าง')
+                        remote_id = album.destination_id
+                    else:
+                        remote_id = api.create_album(album.title)
                 except AmbiguousResult:
                     raise
                 except SafeAPIError:
-                    ledger.db.execute('UPDATE albums SET state=? WHERE key=?', ('failed', album.key))
+                    ledger.db.execute('UPDATE albums SET state=? WHERE key=?', ('failed', destination_key))
                     ledger.db.commit()
                     raise
-                ledger.db.execute('UPDATE albums SET remote_id=?,state=? WHERE key=?', (remote_id, 'ready', album.key))
+                ledger.db.execute('UPDATE albums SET remote_id=?,state=? WHERE key=?', (remote_id, 'ready', destination_key))
+                ledger.db.commit()
+            if destination_key != album.key:
+                ledger.db.execute('INSERT OR REPLACE INTO albums VALUES(?,?,?,?)',
+                                  (album.key, album.title, remote_id, 'ready'))
                 ledger.db.commit()
         if api and getattr(api, 'supports_batch_upload', False) is True:
             done = upload_album(album, ledger, output, tool, control, notify, api,

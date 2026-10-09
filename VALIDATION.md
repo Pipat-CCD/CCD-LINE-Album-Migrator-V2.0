@@ -4,7 +4,7 @@
 
 สภาพแวดล้อม Linux, Python 3.12.14, ExifTool 13.59 จาก official Git tag `13.59`, commit `2200871d9cef988051d2a99d67df3bda6cbb30a8` ใช้ TLS และไม่ปิดการตรวจสอบความถูกต้อง
 
-- `unittest discover`: 46 tests ผ่าน ไม่มี skip เมื่อกำหนด `CCD_TEST_EXIFTOOL` รวมการรับบัญชี `ccdphoto@ccdthailand.org` และปฏิเสธบัญชีปลายทางเดิมด้วย API mock
+- `unittest discover`: 51 tests ผ่าน ไม่มี skip เมื่อกำหนด `CCD_TEST_EXIFTOOL` รวมการรับบัญชี `ccdphoto@ccdthailand.org` และปฏิเสธบัญชีปลายทางเดิมด้วย API mock
 - การแก้ TimeoutExpired: ตรวจชื่อ `exiftool(-k).exe` ก่อนเรียก, ปิด stdin, ตรวจ startup version, แสดงข้อความ timeout ที่ปลอดภัย และทดสอบ process ที่ค้างจริงแล้วถูกยุติเมื่อครบ timeout ไม่ใช่การทดสอบ ExifTool Windows launcher บน Windows จริง
 - เขียน metadata ด้วย ExifTool จริงใน JPEG, PNG ที่ไม่มี EXIF และ HEIC ที่แปลงเป็น JPEG: ตรวจอ่าน DateTimeOriginal, CreateDate, ModifyDate, OffsetTimeOriginal และตรวจ hash ต้นฉบับ
 - ตรวจ filesystem Date modified ของสำเนาให้เป็น `2025-05-09 00:00:00 Asia/Bangkok` และตรวจ Date modified ของต้นฉบับไม่เปลี่ยนบน Linux; การแสดงผล Windows Explorer ยังต้องทดสอบบน Windows
@@ -44,3 +44,11 @@
 7. Build บน Windows และทดสอบ EXE พร้อม ExifTool ทั้งโฟลเดอร์บน Windows อีกเครื่อง
 
 ไม่มีการอัปโหลดภาพจริงหรือใช้ข้อมูลลับของผู้ใช้ระหว่างพัฒนา
+
+## เลือกอัลบั้มปลายทาง — build 2.0.2
+
+- API mock: สองต้นทางคนละวันที่แชร์อัลบั้มใหม่เพียงหนึ่งอัลบั้ม และ Resume ไม่ส่งภาพสำเร็จซ้ำ
+- API mock: เลือก ID ที่แอปเคยบันทึกแล้ว ไม่เรียกสร้างอัลบั้มอีก; ปฏิเสธ ID ที่ไม่มีประวัติก่อนส่งรูป
+- API mock: ผลสร้างอัลบั้มร่วมไม่แน่ชัดหยุดทั้งสองต้นทาง ไม่มี retry อัตโนมัติ
+- GUI จริงบน Linux/Xvfb: เปิดหน้าต่างเลือกอัลบั้มเดิม เลือกจากประวัติ ใช้กับแถวต้นทาง แสดงชื่อปลายทาง บังคับ Dry Run ใหม่ และคืนปลายทางหลังเปิดโปรแกรมใหม่
+- ยังไม่ได้ตรวจฟีเจอร์ปลายทางนี้กับบัญชี Google จริงหรือ Windows จริง
