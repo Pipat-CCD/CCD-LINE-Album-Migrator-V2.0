@@ -1,0 +1,1 @@
+"""CCD LINE Album Migrator."""

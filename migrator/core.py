@@ -1,0 +1,172 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import shutil
+import sqlite3
+import subprocess
+from dataclasses import dataclass
+from datetime import datetime, date
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from PIL import Image
+from pillow_heif import register_heif_opener
+
+register_heif_opener()
+SUPPORTED = {'.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp', '.bmp', '.gif', '.tif', '.tiff', '.ico', '.avif'}
+
+
+def album_date(value: str) -> date:
+    """ISO CE date or explicitly confirmed Thai album label."""
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        day, month, year = map(int, value.split('-'))
+        if year < 100:
+            year += 2500
+        if year >= 2400:
+            year -= 543
+        return date(year, month, day)
+
+
+def digest(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+@dataclass(frozen=True)
+class Photo:
+    path: Path
+    sha256: str
+    width: int
+    height: int
+    error: str = ''
+    duplicate: bool = False
+
+
+def scan(folder: Path) -> list[Photo]:
+    result = []
+    seen = set()
+    for path in sorted(folder.iterdir()):
+        if not path.is_file() or path.suffix.lower() not in SUPPORTED:
+            continue
+        try:
+            sha = digest(path)
+            with Image.open(path) as image:
+                image.verify()
+            with Image.open(path) as image:
+                image.load()
+                width, height = image.size
+            result.append(Photo(path, sha, width, height, duplicate=sha in seen))
+            seen.add(sha)
+        except Exception as exc:
+            result.append(Photo(path, '', 0, 0, type(exc).__name__))
+    return result
+
+
+class Ledger:
+    def __init__(self, path: Path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.db = sqlite3.connect(path)
+        self.db.execute('PRAGMA journal_mode=WAL')
+        self.db.executescript('''
+          CREATE TABLE IF NOT EXISTS albums (
+            key TEXT PRIMARY KEY, title TEXT NOT NULL, remote_id TEXT, state TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS photos (
+            album TEXT NOT NULL, sha TEXT NOT NULL, source TEXT NOT NULL,
+            state TEXT NOT NULL, media_id TEXT, message TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY(album, sha));
+          CREATE TABLE IF NOT EXISTS skipped (
+            album TEXT NOT NULL, source TEXT NOT NULL, sha TEXT, reason TEXT,
+            PRIMARY KEY(album,source));
+        ''')
+
+    def state(self, album, sha):
+        row = self.db.execute('SELECT state FROM photos WHERE album=? AND sha=?', (album, sha)).fetchone()
+        return row[0] if row else None
+
+    def record(self, album, photo, state, media_id=None, message=''):
+        self.db.execute('''INSERT INTO photos VALUES(?,?,?,?,?,?)
+            ON CONFLICT(album,sha) DO UPDATE SET state=excluded.state,
+            media_id=excluded.media_id,message=excluded.message''',
+            (album, photo.sha256, str(photo.path), state, media_id, message))
+        self.db.commit()
+
+    def skip(self, album, photo):
+        self.db.execute('INSERT OR REPLACE INTO skipped VALUES(?,?,?,?)',
+                        (album, str(photo.path), photo.sha256, 'corrupt' if photo.error else 'duplicate'))
+        self.db.commit()
+
+    def export(self, path: Path):
+        import csv
+        with path.open('w', encoding='utf-8-sig', newline='') as stream:
+            writer = csv.writer(stream)
+            writer.writerow(['album', 'sha256', 'source', 'state', 'media_id', 'message'])
+            for row in self.db.execute('SELECT * FROM photos ORDER BY album,source'):
+                # Spreadsheet formula injection protection for user-controlled paths.
+                writer.writerow(["'" + cell if isinstance(cell, str) and cell.startswith(('=', '+', '-', '@'))
+                                 else cell for cell in row])
+            for album, source, sha, reason in self.db.execute('SELECT * FROM skipped ORDER BY album,source'):
+                if source.startswith(('=', '+', '-', '@')):
+                    source = "'" + source
+                writer.writerow([album, sha, source, 'skipped', '', reason])
+
+    def close(self):
+        self.db.close()
+
+
+def find_exiftool(configured: str = '') -> str:
+    if configured and Path(configured).is_file():
+        return str(Path(configured).resolve())
+    import sys
+    bundled = Path(getattr(sys, '_MEIPASS', Path(__file__).parent.parent)) / 'tools' / 'exiftool.exe'
+    if bundled.is_file():
+        return str(bundled)
+    found = shutil.which('exiftool') or shutil.which('exiftool.exe')
+    if not found:
+        raise RuntimeError('ไม่พบ ExifTool: เลือก exiftool.exe ในหน้าตั้งค่า')
+    return found
+
+
+def metadata(path: Path, tool: str) -> dict:
+    output = subprocess.run([tool, '-j', '-DateTimeOriginal', '-CreateDate', '-ModifyDate',
+                             '-OffsetTimeOriginal', '-XMP:DateCreated', str(path)],
+                            capture_output=True, check=True, timeout=60)
+    return json.loads(output.stdout)[0]
+
+
+def prepare(photo: Photo, when: date, output: Path, tool: str) -> Path:
+    if photo.error or photo.duplicate:
+        raise ValueError('ไฟล์เสียหรือซ้ำ')
+    if digest(photo.path) != photo.sha256:
+        raise RuntimeError('ไฟล์ต้นฉบับเปลี่ยนหลังตรวจสอบ กรุณา Dry Run ใหม่')
+    output.mkdir(parents=True, exist_ok=True)
+    # HEIC and other formats normalize to JPEG; PNG remains lossless.
+    suffix = '.png' if photo.path.suffix.lower() == '.png' else '.jpg'
+    target = output / (photo.sha256 + suffix)
+    if target.resolve() == photo.path.resolve():
+        raise ValueError('โฟลเดอร์สำเนาต้องแยกจากต้นฉบับ')
+    if photo.path.suffix.lower() in {'.jpg', '.jpeg', '.png'}:
+        shutil.copy2(photo.path, target)
+    else:
+        from PIL import ImageOps
+        with Image.open(photo.path) as image:
+            ImageOps.exif_transpose(image).convert('RGB').save(target, 'JPEG', quality=95)
+    local = datetime.combine(when, datetime.min.time(), ZoneInfo('Asia/Bangkok'))
+    stamp = local.strftime('%Y:%m:%d %H:%M:%S')
+    args = [tool, '-overwrite_original', f'-DateTimeOriginal={stamp}',
+            f'-CreateDate={stamp}', f'-ModifyDate={stamp}', '-OffsetTimeOriginal=+07:00',
+            f'-XMP:DateCreated={local.isoformat()}', str(target)]
+    subprocess.run(args, capture_output=True, check=True, timeout=60)
+    actual = metadata(target, tool)
+    if any(actual.get(tag) != stamp for tag in ('DateTimeOriginal', 'CreateDate', 'ModifyDate')) or actual.get('OffsetTimeOriginal') != '+07:00':
+        raise RuntimeError('ตรวจสอบ metadata หลังเขียนไม่ผ่าน')
+    if digest(photo.path) != photo.sha256:
+        raise RuntimeError('ต้นฉบับเปลี่ยนระหว่างทำงาน')
+    if target.stat().st_size > 200 * 1024 * 1024:
+        raise RuntimeError('สำเนาเกินขนาดรูป 200 MB ของ Google Photos')
+    return target
