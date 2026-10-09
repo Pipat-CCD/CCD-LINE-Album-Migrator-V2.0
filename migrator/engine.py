@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 
 from .core import Ledger, Photo, prepare
-from .google_photos import AmbiguousResult, SafeAPIError
+from .google_photos import AmbiguousResult, SafeAPIError, EXPECTED_ACCOUNT
 
 DONE_STATES = ('uploaded', 'confirmed_manual')
 
@@ -20,7 +20,7 @@ class Album:
 
     @property
     def key(self):
-        text = str(self.folder.resolve()) + '|' + self.when.isoformat()
+        text = EXPECTED_ACCOUNT + '|' + str(self.folder.resolve()) + '|' + self.when.isoformat()
         return hashlib.sha256(text.encode()).hexdigest()
 
 

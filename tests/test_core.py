@@ -170,13 +170,26 @@ class APITests(unittest.TestCase):
 
     def test_unverified_account_is_blocked(self):
         api = self.api()
-        api.session.request.return_value = self.response(200, {'email': 'photos@ccdthailand.org', 'email_verified': False})
+        api.session.request.return_value = self.response(200, {'email': 'ccdphoto@ccdthailand.org', 'email_verified': False})
+        with self.assertRaises(SafeAPIError):
+            api.verify_account()
+
+    def test_correct_ccd_account_is_accepted(self):
+        api = self.api()
+        api.session.request.return_value = self.response(200, {
+            'email': 'ccdphoto@ccdthailand.org', 'email_verified': True})
+        self.assertEqual(api.verify_account(), 'ccdphoto@ccdthailand.org')
+
+    def test_previous_destination_account_is_blocked(self):
+        api = self.api()
+        api.session.request.return_value = self.response(200, {
+            'email': 'photos@ccdthailand.org', 'email_verified': True})
         with self.assertRaises(SafeAPIError):
             api.verify_account()
 
     def test_create_server_error_is_ambiguous_no_retry(self):
         api = self.api()
-        api.account = 'photos@ccdthailand.org'
+        api.account = 'ccdphoto@ccdthailand.org'
         api.session.request.return_value = self.response(500, {})
         with self.assertRaises(AmbiguousResult):
             api.create_album('album')
@@ -184,7 +197,7 @@ class APITests(unittest.TestCase):
 
     def test_rate_limit_and_membership_request(self):
         api = self.api()
-        api.account = 'photos@ccdthailand.org'
+        api.account = 'ccdphoto@ccdthailand.org'
         api.session.request.side_effect = [self.response(429, {}), self.response(200,
             {'newMediaItemResults': [{'mediaItem': {'id': 'media-1'}, 'status': {}}]})]
         self.assertEqual(api.create_media('upload-token', 'album-1', 'photo.jpg'), 'media-1')

@@ -97,7 +97,7 @@ class App:
         self.progress.pack(fill='x')
         self.log = tk.Text(dashboard, height=13, state='disabled', wrap='word')
         self.log.pack(fill='both', expand=True, pady=8)
-        ttk.Label(settings, text='ปลายทางบังคับ: photos@ccdthailand.org\n'
+        ttk.Label(settings, text='ปลายทางบังคับ: ccdphoto@ccdthailand.org\n'
                   'ขอสิทธิ์ appendonly + openid/email เพื่อตรวจสอบบัญชี\n'
                   'token เก็บในโฟลเดอร์ข้อมูลผู้ใช้ ห้ามส่งให้ผู้อื่น').pack(anchor='w', pady=10)
         self.client = tk.StringVar(value=self.config.get('client', ''))
@@ -170,7 +170,7 @@ class App:
             return
         action = 'ยืนยันภาพมีอยู่แล้ว (ข้ามในการ Resume)' if exists else 'ยืนยันไม่มีรายการ และอนุญาตลองสร้างใหม่'
         if not messagebox.askyesno('ยืนยันการกู้คืนด้วยตนเอง', action + '\n'
-                                  'คุณได้ตรวจสอบในบัญชี photos@ccdthailand.org แล้วใช่หรือไม่?\n'
+                                  'คุณได้ตรวจสอบในบัญชี ccdphoto@ccdthailand.org แล้วใช่หรือไม่?\n'
                                   'ถ้าตรวจผิด อาจเกิดรายการซ้ำ ระบบตรวจคลังรูปแทนคุณไม่ได้'):
             return
         ledger = Ledger(self.data / 'state.sqlite3')
@@ -324,7 +324,7 @@ class App:
             messagebox.showwarning('ต้อง Dry Run ก่อน', 'กรุณาตรวจสำเนาและ metadata ให้ผ่านก่อนอัปโหลด')
             return
         if upload and not messagebox.askyesno('ยืนยันอัปโหลดจริง',
-            f'จะอัปโหลด {len(self.albums)} อัลบั้ม ไป photos@ccdthailand.org\n'
+            f'จะอัปโหลด {len(self.albums)} อัลบั้ม ไป ccdphoto@ccdthailand.org\n'
             'Google Photos อาจคิดพื้นที่จัดเก็บ ต้องการดำเนินการหรือไม่?'):
             return
         try:

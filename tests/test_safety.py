@@ -30,7 +30,7 @@ class SafetyTests(unittest.TestCase):
 
     def test_network_exception_does_not_leak_credentials(self):
         api = PhotosAPI(Mock(valid=True, token='SENSITIVE-TEST-TOKEN'), sleeper=Mock())
-        api.account = 'photos@ccdthailand.org'
+        api.account = 'ccdphoto@ccdthailand.org'
         api.session = Mock()
         api.session.request.side_effect = requests.Timeout('SENSITIVE-TEST-TOKEN')
         with self.assertRaises(AmbiguousResult) as caught:

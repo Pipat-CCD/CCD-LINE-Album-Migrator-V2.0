@@ -4,7 +4,7 @@
 
 สภาพแวดล้อม Linux, Python 3.12.14, ExifTool 13.59 จาก official Git tag `13.59`, commit `2200871d9cef988051d2a99d67df3bda6cbb30a8` ใช้ TLS และไม่ปิดการตรวจสอบความถูกต้อง
 
-- `unittest discover`: 19 tests ผ่าน ไม่มี skip เมื่อกำหนด `CCD_TEST_EXIFTOOL`
+- `unittest discover`: 21 tests ผ่าน ไม่มี skip เมื่อกำหนด `CCD_TEST_EXIFTOOL` รวมการรับบัญชี `ccdphoto@ccdthailand.org` และปฏิเสธบัญชีปลายทางเดิมด้วย API mock
 - เขียน metadata ด้วย ExifTool จริงใน JPEG, PNG ที่ไม่มี EXIF และ HEIC ที่แปลงเป็น JPEG: ตรวจอ่าน DateTimeOriginal, CreateDate, ModifyDate, OffsetTimeOriginal และตรวจ hash ต้นฉบับ
 - Dry Run 71 ภาพจำลอง: JPEG 60, PNG 10, HEIC 1 วันที่ `2025-05-09 00:00:00 +07:00` ตรวจ metadata ครบ 71 และ hash ต้นฉบับคงเดิม รันซ้ำผ่านและจำนวนสำเนายังเป็น 71
 - Batch 100 อัลบั้มพร้อม Resume โดย API mock: สร้างรายการ 100 ครั้ง รวมหลัง Resume ยัง 100 ครั้ง ไม่เรียกอัปโหลดไฟล์สำเร็จซ้ำ
@@ -16,7 +16,7 @@
 ## สิ่งที่ยังไม่ทดสอบ
 
 - ภาพ LINE จริง 71 ภาพขององค์กรยังไม่ได้รับมา ภาพทดสอบทั้งหมดเป็นภาพสร้างขึ้น
-- OAuth จริง, token refresh จริง, ยืนยันบัญชี `photos@ccdthailand.org` ผ่าน Google จริง, อัปโหลดจริง, การสร้างอัลบั้มจริง และวันที่ที่ Google Photos แสดงหลังอัปโหลด
+- OAuth จริง, token refresh จริง, ยืนยันบัญชี `ccdphoto@ccdthailand.org` ผ่าน Google จริง, อัปโหลดจริง, การสร้างอัลบั้มจริง และวันที่ที่ Google Photos แสดงหลังอัปโหลด
 - GUI บน Windows 11, DPAPI และ Windows file lock บน Windows จริง: Linux tests ไม่ใช่หลักฐานรับรองส่วนนี้
 - `setup.ps1`, `build.ps1`, Setup.cmd และ Start.cmd บน Windows จริง และ EXE ที่สร้างด้วย PyInstaller
 - ติดตั้งบนเครื่อง Windows สะอาด, นโยบายองค์กร, code signing และความจุ storage ของบัญชี

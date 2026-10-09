@@ -13,7 +13,7 @@ from . import token_store
 SCOPES = ['https://www.googleapis.com/auth/photoslibrary.appendonly', 'openid',
           'https://www.googleapis.com/auth/userinfo.email']
 BASE = 'https://photoslibrary.googleapis.com/v1'
-EXPECTED_ACCOUNT = 'photos@ccdthailand.org'
+EXPECTED_ACCOUNT = 'ccdphoto@ccdthailand.org'
 
 
 class SafeAPIError(RuntimeError):
@@ -112,7 +112,7 @@ class PhotosAPI:
             raise SafeAPIError('อ่านข้อมูลบัญชีไม่ได้') from None
         email = info.get('email', '').lower()
         if email != EXPECTED_ACCOUNT or info.get('email_verified') is not True:
-            raise SafeAPIError('บัญชีไม่ตรงกับ photos@ccdthailand.org หรืออีเมลยังไม่ยืนยัน')
+            raise SafeAPIError('บัญชีไม่ตรงกับ ccdphoto@ccdthailand.org หรืออีเมลยังไม่ยืนยัน')
         self.account = email
         return email
 
